@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="none">
+  <defs>
+    <!-- Mask: show only the LEFT half (left square goes OVER right square on left side) -->
+    <mask id="maskLeftOver">
+      <!-- White = show, Black = hide -->
+      <rect x="0" y="0" width="500" height="500" fill="black"/>
+      <!-- Left half where left square is on top -->
+      <rect x="0" y="0" width="255" height="500" fill="white"/>
+    </mask>
+    <!-- Mask: show only the RIGHT half (right square goes OVER left square on right side) -->
+    <mask id="maskRightOver">
+      <rect x="0" y="0" width="500" height="500" fill="black"/>
+      <rect x="245" y="0" width="255" height="500" fill="white"/>
+    </mask>
+  </defs>
+
+  <!-- === LAYER 1: Right square (bottom layer — visible on right side only) === -->
+  <!-- Right square full, but only right half visible -->
+  <rect x="230" y="130" width="210" height="210" rx="42" ry="42"
+        fill="none" stroke="white" stroke-width="46"
+        mask="url(#maskRightOver)"/>
+
+  <!-- === LAYER 2: Left square (top layer — always fully visible) === -->
+  <rect x="60" y="160" width="210" height="210" rx="42" ry="42"
+        fill="none" stroke="white" stroke-width="56"/>
+
+  <!-- === LAYER 3: Right square again (top layer — visible on left side, goes over left square) === -->
+  <rect x="230" y="130" width="210" height="210" rx="42" ry="42"
+        fill="none" stroke="white" stroke-width="46"
+        mask="url(#maskLeftOver)"/>
+</svg>
