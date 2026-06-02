@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react'
 import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
 import { maxUint256, encodeFunctionData, concat, type Hex } from 'viem'
-import { Attribution } from 'ox/erc8021'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
@@ -16,9 +15,12 @@ import { PANCAKESWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/pancakeswapV3Rou
 import { applySlippage, getDeadline, parseTokenAmount } from '@/lib/utils'
 import { addCustomToken, useInvalidateBalances } from './useTokenBalances'
 
-// ── Builder Code attribution suffix (ERC-8021) ────────────────────────────
-const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'
-const DATA_SUFFIX = Attribution.toDataSuffix({ codes: [BUILDER_CODE] }) as Hex
+// ── ERC-8021 Builder Code attribution suffix ───────────────────────────────
+// Schema 0 (canonical registry): codes_ascii ∥ codes_len (1B) ∥ schema_id=0x00 (1B) ∥ erc_marker (16B)
+// Builder code: bc_480ypir7
+// hex('bc_480ypir7') = 62635f3438307970697237 (11 bytes = 0x0b)
+// erc_marker = 80218021802180218021802180218021 (16 bytes)
+const DATA_SUFFIX: Hex = ('0x62635f3438307970697237' + '0b' + '00' + '80218021802180218021802180218021') as Hex
 
 /** Append ERC-8021 attribution suffix to calldata */
 function withSuffix(data: Hex): Hex {
