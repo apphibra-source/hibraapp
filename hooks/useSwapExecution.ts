@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
-import { maxUint256 } from 'viem'
+import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
+import { maxUint256, encodeFunctionData, concat, type Hex } from 'viem'
+import { Attribution } from 'ox/erc8021'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
@@ -14,6 +15,15 @@ import { SUSHISWAP_ROUTER_ABI } from '@/lib/contracts/abis/sushiswapRouter'
 import { PANCAKESWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/pancakeswapV3Router'
 import { applySlippage, getDeadline, parseTokenAmount } from '@/lib/utils'
 import { addCustomToken, useInvalidateBalances } from './useTokenBalances'
+
+// ── Builder Code attribution suffix (ERC-8021) ────────────────────────────
+const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'
+const DATA_SUFFIX = Attribution.toDataSuffix({ codes: [BUILDER_CODE] }) as Hex
+
+/** Append ERC-8021 attribution suffix to calldata */
+function withSuffix(data: Hex): Hex {
+  return concat([data, DATA_SUFFIX])
+}
 
 interface SwapExecutionParams {
   tokenIn: Token
@@ -28,10 +38,36 @@ type SwapStatus = 'idle' | 'approving' | 'swapping' | 'success' | 'error'
 export function useSwapExecution() {
   const { address } = useAccount()
   const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
+  const { sendTransactionAsync } = useSendTransaction()
   const invalidateBalances = useInvalidateBalances()
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [txHash, setTxHash] = useState<string | null>(null)
+
+  // Approve helper — uses raw sendTransaction with no suffix (approval doesn't need it)
+  const approveToken = useCallback(async (
+    tokenAddress: `0x${string}`,
+    spender: `0x${string}`,
+    amount: bigint
+  ) => {
+    if (!address || !publicClient) return
+    const allowance = await publicClient.readContract({
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [address, spender],
+    }) as bigint
+    if (allowance >= amount) return
+
+    toast.loading('Approving token...', { id: 'approve' })
+    const data = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [spender, maxUint256],
+    })
+    const hash = await sendTransactionAsync({ to: tokenAddress, data })
+    await publicClient.waitForTransactionReceipt({ hash })
+    toast.success('Token approved', { id: 'approve' })
+  }, [address, publicClient, sendTransactionAsync])
 
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
@@ -48,61 +84,38 @@ export function useSwapExecution() {
       const isETHOut = tokenOut.address === TOKEN_ADDRESSES.ETH
 
       try {
-        // ── Step 1: Approve if needed (skip for ETH input and wrap) ───────────
+        // ── Step 1: Approve ───────────────────────────────────────────────────
         if (!isETHIn && quote.dex !== 'wrap') {
           setStatus('approving')
           const routerAddress = getRouterAddress(quote.dex)
-          const allowance = await publicClient.readContract({
-            address: tokenIn.address as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'allowance',
-            args: [address, routerAddress],
-          })
-          if ((allowance as bigint) < amountInParsed) {
-            toast.loading('Approving token...', { id: 'approve' })
-            const approveTx = await writeContractAsync({
-              address: tokenIn.address as `0x${string}`,
-              abi: ERC20_ABI,
-              functionName: 'approve',
-              args: [routerAddress, maxUint256],
-            })
-            await publicClient.waitForTransactionReceipt({ hash: approveTx })
-            toast.success('Token approved', { id: 'approve' })
-          }
+          await approveToken(tokenIn.address as `0x${string}`, routerAddress, amountInParsed)
         }
 
-        // ── Step 2: Execute swap ───────────────────────────────────────────────
+        // ── Step 2: Build calldata + append attribution suffix ────────────────
         setStatus('swapping')
         toast.loading('Sending swap transaction...', { id: 'swap' })
 
-        let hash: `0x${string}`
+        let to: `0x${string}`
+        let data: Hex
+        let value: bigint = 0n
 
         if (quote.dex === 'wrap') {
-          // ── ETH ↔ WETH wrap/unwrap ─────────────────────────────────────────
           if (isETHIn) {
-            hash = await writeContractAsync({
-              address: TOKEN_ADDRESSES.WETH,
-              abi: WETH_ABI,
-              functionName: 'deposit',
-              value: amountInParsed,
-            })
+            to = TOKEN_ADDRESSES.WETH
+            data = encodeFunctionData({ abi: WETH_ABI, functionName: 'deposit' })
+            value = amountInParsed
           } else {
-            hash = await writeContractAsync({
-              address: TOKEN_ADDRESSES.WETH,
-              abi: WETH_ABI,
-              functionName: 'withdraw',
-              args: [amountInParsed],
-            })
+            to = TOKEN_ADDRESSES.WETH
+            data = encodeFunctionData({ abi: WETH_ABI, functionName: 'withdraw', args: [amountInParsed] })
           }
 
         } else if (quote.dex === 'uniswapV3') {
-          // ── Uniswap V3 ────────────────────────────────────────────────────────
           const resolvedIn = isETHIn ? TOKEN_ADDRESSES.WETH : tokenIn.address as `0x${string}`
           const resolvedOut = isETHOut ? TOKEN_ADDRESSES.WETH : tokenOut.address as `0x${string}`
           const feeBps = parseFee(quote.fee)
+          to = ADDRESSES.UNISWAP_V3_ROUTER
 
           if (isETHOut) {
-            const { encodeFunctionData } = await import('viem')
             const swapCalldata = encodeFunctionData({
               abi: UNISWAP_V3_ROUTER_ABI,
               functionName: 'exactInputSingle',
@@ -113,30 +126,27 @@ export function useSwapExecution() {
               functionName: 'unwrapWETH9',
               args: [amountOutMin, address],
             })
-            hash = await writeContractAsync({
-              address: ADDRESSES.UNISWAP_V3_ROUTER,
+            data = encodeFunctionData({
               abi: UNISWAP_V3_ROUTER_ABI,
               functionName: 'multicall',
               args: [deadline, [swapCalldata, unwrapCalldata]],
             })
           } else {
-            hash = await writeContractAsync({
-              address: ADDRESSES.UNISWAP_V3_ROUTER,
+            data = encodeFunctionData({
               abi: UNISWAP_V3_ROUTER_ABI,
               functionName: 'exactInputSingle',
               args: [{ tokenIn: resolvedIn, tokenOut: resolvedOut, fee: feeBps, recipient: address, amountIn: amountInParsed, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }],
-              value: isETHIn ? amountInParsed : 0n,
             })
+            if (isETHIn) value = amountInParsed
           }
 
         } else if (quote.dex === 'pancakeswapV3') {
-          // ── PancakeSwap V3 (identical interface to Uniswap V3) ────────────────
           const resolvedIn = isETHIn ? TOKEN_ADDRESSES.WETH : tokenIn.address as `0x${string}`
           const resolvedOut = isETHOut ? TOKEN_ADDRESSES.WETH : tokenOut.address as `0x${string}`
           const feeBps = parseFee(quote.fee)
+          to = ADDRESSES.PANCAKESWAP_V3_SMART_ROUTER
 
           if (isETHOut) {
-            const { encodeFunctionData } = await import('viem')
             const swapCalldata = encodeFunctionData({
               abi: PANCAKESWAP_V3_ROUTER_ABI,
               functionName: 'exactInputSingle',
@@ -147,81 +157,59 @@ export function useSwapExecution() {
               functionName: 'unwrapWETH9',
               args: [amountOutMin, address],
             })
-            hash = await writeContractAsync({
-              address: ADDRESSES.PANCAKESWAP_V3_SMART_ROUTER,
+            data = encodeFunctionData({
               abi: PANCAKESWAP_V3_ROUTER_ABI,
               functionName: 'multicall',
               args: [deadline, [swapCalldata, unwrapCalldata]],
             })
           } else {
-            hash = await writeContractAsync({
-              address: ADDRESSES.PANCAKESWAP_V3_SMART_ROUTER,
+            data = encodeFunctionData({
               abi: PANCAKESWAP_V3_ROUTER_ABI,
               functionName: 'exactInputSingle',
               args: [{ tokenIn: resolvedIn, tokenOut: resolvedOut, fee: feeBps, recipient: address, amountIn: amountInParsed, amountOutMinimum: amountOutMin, sqrtPriceLimitX96: 0n }],
-              value: isETHIn ? amountInParsed : 0n,
             })
+            if (isETHIn) value = amountInParsed
           }
 
         } else if (quote.dex === 'aerodrome') {
-          // ── Aerodrome ─────────────────────────────────────────────────────────
           const resolvedIn = isETHIn ? TOKEN_ADDRESSES.WETH : tokenIn.address as `0x${string}`
           const resolvedOut = isETHOut ? TOKEN_ADDRESSES.WETH : tokenOut.address as `0x${string}`
           const route = [{ from: resolvedIn, to: resolvedOut, stable: false, factory: ADDRESSES.AERODROME_FACTORY }]
+          to = ADDRESSES.AERODROME_ROUTER
 
           if (isETHIn) {
-            hash = await writeContractAsync({
-              address: ADDRESSES.AERODROME_ROUTER,
-              abi: AERODROME_ROUTER_ABI,
-              functionName: 'swapExactETHForTokens',
-              args: [amountOutMin, route, address, deadline],
-              value: amountInParsed,
-            })
+            data = encodeFunctionData({ abi: AERODROME_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [amountOutMin, route, address, deadline] })
+            value = amountInParsed
           } else if (isETHOut) {
-            hash = await writeContractAsync({
-              address: ADDRESSES.AERODROME_ROUTER,
-              abi: AERODROME_ROUTER_ABI,
-              functionName: 'swapExactTokensForETH',
-              args: [amountInParsed, amountOutMin, route, address, deadline],
-            })
+            data = encodeFunctionData({ abi: AERODROME_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [amountInParsed, amountOutMin, route, address, deadline] })
           } else {
-            hash = await writeContractAsync({
-              address: ADDRESSES.AERODROME_ROUTER,
-              abi: AERODROME_ROUTER_ABI,
-              functionName: 'swapExactTokensForTokens',
-              args: [amountInParsed, amountOutMin, route, address, deadline],
-            })
+            data = encodeFunctionData({ abi: AERODROME_ROUTER_ABI, functionName: 'swapExactTokensForTokens', args: [amountInParsed, amountOutMin, route, address, deadline] })
           }
 
         } else {
-          // ── SushiSwap (default) ───────────────────────────────────────────────
+          // SushiSwap
           const resolvedIn = isETHIn ? TOKEN_ADDRESSES.WETH : tokenIn.address as `0x${string}`
           const resolvedOut = isETHOut ? TOKEN_ADDRESSES.WETH : tokenOut.address as `0x${string}`
+          to = ADDRESSES.SUSHISWAP_ROUTER
 
           if (isETHIn) {
-            hash = await writeContractAsync({
-              address: ADDRESSES.SUSHISWAP_ROUTER,
-              abi: SUSHISWAP_ROUTER_ABI,
-              functionName: 'swapExactETHForTokens',
-              args: [amountOutMin, [resolvedIn, resolvedOut], address, deadline],
-              value: amountInParsed,
-            })
+            data = encodeFunctionData({ abi: SUSHISWAP_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [amountOutMin, [resolvedIn, resolvedOut], address, deadline] })
+            value = amountInParsed
           } else if (isETHOut) {
-            hash = await writeContractAsync({
-              address: ADDRESSES.SUSHISWAP_ROUTER,
-              abi: SUSHISWAP_ROUTER_ABI,
-              functionName: 'swapExactTokensForETH',
-              args: [amountInParsed, amountOutMin, [resolvedIn, resolvedOut], address, deadline],
-            })
+            data = encodeFunctionData({ abi: SUSHISWAP_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [amountInParsed, amountOutMin, [resolvedIn, resolvedOut], address, deadline] })
           } else {
-            hash = await writeContractAsync({
-              address: ADDRESSES.SUSHISWAP_ROUTER,
-              abi: SUSHISWAP_ROUTER_ABI,
-              functionName: 'swapExactTokensForTokens',
-              args: [amountInParsed, amountOutMin, [resolvedIn, resolvedOut], address, deadline],
-            })
+            data = encodeFunctionData({ abi: SUSHISWAP_ROUTER_ABI, functionName: 'swapExactTokensForTokens', args: [amountInParsed, amountOutMin, [resolvedIn, resolvedOut], address, deadline] })
           }
         }
+
+        // ── Append ERC-8021 attribution suffix to calldata ────────────────────
+        const dataWithSuffix = withSuffix(data!)
+
+        const hash = await sendTransactionAsync({
+          to: to!,
+          data: dataWithSuffix,
+          value,
+        })
 
         setTxHash(hash)
         const receipt = await publicClient.waitForTransactionReceipt({ hash })
@@ -243,9 +231,7 @@ export function useSwapExecution() {
           action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
         })
 
-        // Register output token so it appears in balance list
         addCustomToken(tokenOut)
-        // Refresh balances immediately
         setTimeout(() => invalidateBalances(), 2000)
 
         recordSwap({
@@ -266,7 +252,7 @@ export function useSwapExecution() {
         toast.error('Swap failed', { id: 'swap', description: message.slice(0, 100) })
       }
     },
-    [address, publicClient, writeContractAsync, invalidateBalances]
+    [address, publicClient, sendTransactionAsync, approveToken, invalidateBalances]
   )
 
   const reset = useCallback(() => {
