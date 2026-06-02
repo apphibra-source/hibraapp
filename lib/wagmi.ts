@@ -17,14 +17,10 @@ import { Attribution } from 'ox/erc8021'
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? ''
 
-// ── Builder Code (get from base.dev > Settings > Builder Code) ─────────────
-// Replace 'YOUR-BUILDER-CODE' with your actual code after registering on base.dev
-const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'YOUR-BUILDER-CODE'
+// ── Builder Code (base.dev attribution) ───────────────────────────────────
+const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'
 
-const DATA_SUFFIX =
-  BUILDER_CODE !== 'YOUR-BUILDER-CODE'
-    ? Attribution.toDataSuffix({ codes: [BUILDER_CODE] })
-    : undefined
+const DATA_SUFFIX = Attribution.toDataSuffix({ codes: [BUILDER_CODE] })
 
 // ── Connectors ─────────────────────────────────────────────────────────────
 const connectors = connectorsForWallets(
@@ -77,5 +73,5 @@ export const config = createConfig({
     ),
   },
   // Builder Code attribution — appended to all transactions automatically
-  ...(DATA_SUFFIX ? { dataSuffix: DATA_SUFFIX } : {}),
+  dataSuffix: DATA_SUFFIX,
 })
