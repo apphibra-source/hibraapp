@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
-import { maxUint256, encodeFunctionData, concat, type Hex } from 'viem'
+import { maxUint256, encodeFunctionData, type Hex } from 'viem'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
@@ -24,7 +24,9 @@ const DATA_SUFFIX: Hex = ('0x62635f3438307970697237' + '0b' + '00' + '8021802180
 
 /** Append ERC-8021 attribution suffix to calldata */
 function withSuffix(data: Hex): Hex {
-  return concat([data, DATA_SUFFIX])
+  // String concat: data is 0x..., DATA_SUFFIX is 0x...
+  // Result: 0x + data_without_0x + suffix_without_0x
+  return (data + DATA_SUFFIX.slice(2)) as Hex
 }
 
 interface SwapExecutionParams {
