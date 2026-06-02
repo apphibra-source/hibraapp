@@ -15,7 +15,7 @@ const DEX_LOGOS: Record<string, string> = {
   uniswapV3:     'https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png',
   aerodrome:     'https://assets.coingecko.com/coins/images/31745/small/token.png',
   sushiswap:     'https://assets.coingecko.com/coins/images/12271/small/512x512_Logo_no_chop.png',
-  pancakeswapV3: 'https://tokens.pancakeswap.finance/images/symbol/cake.png',
+  pancakeswapV3: 'https://coin-images.coingecko.com/coins/images/12632/small/pancakeswap-cake-logo_%281%29.png',
   wrap:          '',
 }
 
