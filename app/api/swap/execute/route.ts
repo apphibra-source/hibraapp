@@ -1,15 +1,17 @@
 /**
  * POST /api/swap/execute
  *
- * x402-protected endpoint — requires a valid X-PAYMENT header ($0.10 USDC).
- * The middleware in middleware.ts verifies & settles the payment before this handler runs.
+ * x402-protected endpoint — charges $0.10 USDC per request via withX402.
+ * withX402 is the correct wrapper for API routes: it only settles payment
+ * after a successful (status < 400) response, preventing charges on failures.
  *
- * Receives swap parameters, builds the transaction calldata, and returns it to the
+ * Receives swap parameters, builds transaction calldata, returns it to the
  * frontend so wagmi can send the actual on-chain transaction.
- * The private key / signing key never leaves the server — the user signs via their wallet.
  */
 
-import { type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
+import { withX402 } from 'x402-next'
+import { facilitator } from '@coinbase/x402'
 import { encodeFunctionData, type Hex } from 'viem'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
 import { UNISWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/uniswapV3Router'
@@ -19,10 +21,7 @@ import { PANCAKESWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/pancakeswapV3Rou
 import { WETH_ABI } from '@/lib/contracts/abis/weth'
 import { applySlippage, getDeadline } from '@/lib/utils'
 
-// ── ERC-8021 Builder Code attribution suffix ──────────────────────────────────
-// NOTE: The wagmi config in lib/wagmi.ts already appends the ERC-8021 dataSuffix
-// via ox/erc8021 Attribution.toDataSuffix() on every sendTransaction call.
-// We do NOT append it here again to avoid double-attribution.
+// ── ERC-8021 Builder Code attribution appended via wagmi config (lib/wagmi.ts) ─
 
 interface ExecuteRequest {
   tokenIn: string
@@ -41,22 +40,13 @@ function parseFee(feeStr: string): number {
   return Math.round(num * 10000)
 }
 
-export async function POST(request: NextRequest) {
+async function executeHandler(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as ExecuteRequest
-    const {
-      tokenIn,
-      tokenOut,
-      amountInRaw,
-      amountOutRaw,
-      dex,
-      fee,
-      slippage,
-      userAddress,
-    } = body
+    const { tokenIn, tokenOut, amountInRaw, amountOutRaw, dex, fee, slippage, userAddress } = body
 
     if (!tokenIn || !tokenOut || !amountInRaw || !amountOutRaw || !dex || !userAddress) {
-      return Response.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const amountInParsed = BigInt(amountInRaw)
@@ -175,14 +165,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return raw calldata — wagmi's dataSuffix config appends ERC-8021 attribution automatically
-    return Response.json({
+    return NextResponse.json({
       to: to!,
       data: data!,
-      value, // string representation of wei (send as BigInt on client)
+      value,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
-    return Response.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+// ── x402 protection ────────────────────────────────────────────────────────────
+// withX402 wraps the handler and charges $0.10 USDC on Base mainnet.
+// Payment is only settled after a successful (status < 400) response.
+// CDP_API_KEY_ID and CDP_API_KEY_SECRET env vars are read automatically by facilitator.
+
+const PAYMENT_WALLET = (process.env.PAYMENT_WALLET_ADDRESS ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+
+export const POST = withX402(
+  executeHandler,
+  PAYMENT_WALLET,
+  {
+    price: '$0.10',
+    network: 'base',
+    config: {
+      description: 'Hibra AI Swap — best route on Base network',
+    },
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  facilitator as any
+)
