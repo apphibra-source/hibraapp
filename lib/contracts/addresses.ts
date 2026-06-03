@@ -21,6 +21,9 @@ export const ADDRESSES = {
   NFT_SILVER:  '0x80fE9521638C0d18B3F8cbF512e30D2249caA5F6' as `0x${string}`,
   NFT_GOLD:    '0xaA8909D483B6763F638D7a3a35b4BcA805f02375' as `0x${string}`,
   NFT_DIAMOND: '0x521b325241325c65c600479E6D2C58522f2fB8a6' as `0x${string}`,
+
+  // Protocol fee wallet — removed
+  // FEE_WALLET: '' as `0x${string}`,
 } as const
 
 export const TOKEN_ADDRESSES = {
