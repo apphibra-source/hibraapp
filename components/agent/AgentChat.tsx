@@ -249,7 +249,7 @@ export function AgentChat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about swaps on Base… (Enter to send)"
+            placeholder="Ask about swaps on Base…"
             disabled={loading}
             rows={1}
             className="input-field"
