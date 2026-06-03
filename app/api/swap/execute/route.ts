@@ -11,7 +11,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { withX402 } from 'x402-next'
-import { createFacilitatorConfig } from '@coinbase/x402'
 import { encodeFunctionData, type Hex } from 'viem'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
 import { UNISWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/uniswapV3Router'
@@ -182,15 +181,75 @@ async function executeHandler(request: NextRequest): Promise<NextResponse> {
 
 const PAYMENT_WALLET = (process.env.PAYMENT_WALLET_ADDRESS ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
 
-// Vercel stores multi-line PEM keys with literal \n — restore real newlines
-// so @coinbase/cdp-sdk can parse the EC private key correctly
-const cdpKeyId = process.env.CDP_API_KEY_ID ?? ''
-const cdpKeySecret = (process.env.CDP_API_KEY_SECRET ?? '').replace(/\\n/g, '\n')
+const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402' as const
 
-const cdpFacilitator = createFacilitatorConfig(
-  cdpKeyId || undefined,
-  cdpKeySecret || undefined
-)
+/**
+ * Imports a CDP private key regardless of PEM format.
+ * CDP portal returns SEC1 (BEGIN EC PRIVATE KEY).
+ * jose requires PKCS8, so we convert via Node.js crypto.
+ */
+async function importCdpKey(rawSecret: string) {
+  const { importPKCS8 } = await import('jose')
+  // Normalize Vercel-escaped newlines
+  const pem = rawSecret.replace(/\\n/g, '\n')
+
+  if (pem.includes('BEGIN EC PRIVATE KEY')) {
+    // SEC1 → PKCS8 conversion via Node.js crypto
+    const { createPrivateKey } = await import('crypto')
+    const keyObject = createPrivateKey(pem)
+    const pkcs8Pem = keyObject.export({ type: 'pkcs8', format: 'pem' }) as string
+    return importPKCS8(pkcs8Pem, 'ES256')
+  }
+  // Already PKCS8
+  return importPKCS8(pem, 'ES256')
+}
+
+async function makeCdpJwt(
+  apiKeyId: string,
+  apiKeySecret: string,
+  method: string,
+  path: string
+): Promise<string> {
+  const { SignJWT } = await import('jose')
+  const privateKey = await importCdpKey(apiKeySecret)
+  const nonce = Array.from(
+    crypto.getRandomValues(new Uint8Array(16)),
+    b => b.toString(16).padStart(2, '0')
+  ).join('')
+  const now = Math.floor(Date.now() / 1000)
+  return new SignJWT({
+    sub: apiKeyId,
+    iss: 'cdp',
+    uris: [`${method} api.cdp.coinbase.com${path}`],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: apiKeyId, nonce })
+    .setIssuedAt(now)
+    .setExpirationTime(now + 120)
+    .sign(privateKey)
+}
+
+function buildCdpFacilitator() {
+  const keyId = process.env.CDP_API_KEY_ID ?? ''
+  const keySecret = process.env.CDP_API_KEY_SECRET ?? ''
+  if (!keyId || !keySecret) return null
+  return {
+    url: CDP_FACILITATOR_URL,
+    createAuthHeaders: async () => {
+      const [v, s, sup] = await Promise.all([
+        makeCdpJwt(keyId, keySecret, 'POST', '/platform/v2/x402/verify'),
+        makeCdpJwt(keyId, keySecret, 'POST', '/platform/v2/x402/settle'),
+        makeCdpJwt(keyId, keySecret, 'GET', '/platform/v2/x402/supported'),
+      ])
+      return {
+        verify: { Authorization: `Bearer ${v}` },
+        settle: { Authorization: `Bearer ${s}` },
+        supported: { Authorization: `Bearer ${sup}` },
+      }
+    },
+  }
+}
+
+const cdpFacilitator = buildCdpFacilitator()
 
 export const POST = withX402(
   executeHandler,
@@ -203,5 +262,5 @@ export const POST = withX402(
     },
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  cdpFacilitator as any
+  (cdpFacilitator ?? undefined) as any
 )
