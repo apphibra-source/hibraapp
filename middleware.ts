@@ -21,16 +21,12 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
 // x402 requires:
 // 1. A valid wallet address
-// 2. A public URL (not localhost) — facilitator must reach the resource
-const isPublicUrl =
-  APP_URL.startsWith('https://') &&
-  !APP_URL.includes('localhost') &&
-  !APP_URL.includes('127.0.0.1')
-
-const isX402Enabled =
-  typeof PAYMENT_WALLET === 'string' &&
-  /^0x[0-9a-fA-F]{40}$/.test(PAYMENT_WALLET) &&
-  isPublicUrl
+// 2. A public URL (not localhost)
+// 3. CURRENTLY DISABLED: x402.org/facilitator only supports Base Sepolia testnet,
+//    not Base mainnet. To enable for production, use CDP facilitator:
+//    https://docs.cdp.coinbase.com/x402/welcome
+//    Set CDP_API_KEY_ID + CDP_API_KEY_SECRET and switch to createCdpFacilitator()
+const isX402Enabled = false
 
 const x402Handler = isX402Enabled
   ? paymentMiddleware(
@@ -38,7 +34,11 @@ const x402Handler = isX402Enabled
       {
         '/api/swap/execute': {
           price: '$0.10',
-          network: 'base',
+          // x402.org/facilitator only supports base-sepolia.
+          // For Base mainnet, use CDP facilitator:
+          //   import { createCdpFacilitator } from 'x402-next'
+          //   and set CDP_API_KEY_ID + CDP_API_KEY_SECRET env vars
+          network: 'base-sepolia',
           config: {
             description: 'Hibra AI Swap — best route on Base network',
           },
