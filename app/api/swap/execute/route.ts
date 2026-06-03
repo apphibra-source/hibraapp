@@ -11,7 +11,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 import { withX402 } from 'x402-next'
-import { facilitator } from '@coinbase/x402'
+import { createFacilitatorConfig } from '@coinbase/x402'
 import { encodeFunctionData, type Hex } from 'viem'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
 import { UNISWAP_V3_ROUTER_ABI } from '@/lib/contracts/abis/uniswapV3Router'
@@ -179,9 +179,18 @@ async function executeHandler(request: NextRequest): Promise<NextResponse> {
 // ── x402 protection ────────────────────────────────────────────────────────────
 // withX402 wraps the handler and charges $0.10 USDC on Base mainnet.
 // Payment is only settled after a successful (status < 400) response.
-// CDP_API_KEY_ID and CDP_API_KEY_SECRET env vars are read automatically by facilitator.
 
 const PAYMENT_WALLET = (process.env.PAYMENT_WALLET_ADDRESS ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+
+// Vercel stores multi-line PEM keys with literal \n — restore real newlines
+// so @coinbase/cdp-sdk can parse the EC private key correctly
+const cdpKeyId = process.env.CDP_API_KEY_ID ?? ''
+const cdpKeySecret = (process.env.CDP_API_KEY_SECRET ?? '').replace(/\\n/g, '\n')
+
+const cdpFacilitator = createFacilitatorConfig(
+  cdpKeyId || undefined,
+  cdpKeySecret || undefined
+)
 
 export const POST = withX402(
   executeHandler,
@@ -194,5 +203,5 @@ export const POST = withX402(
     },
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  facilitator as any
+  cdpFacilitator as any
 )
