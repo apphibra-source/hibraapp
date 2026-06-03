@@ -2,43 +2,30 @@ import { paymentMiddleware } from 'x402-next'
 import { type NextRequest, NextResponse } from 'next/server'
 
 /**
- * x402 Payment Middleware — CDP Facilitator (Base mainnet)
+ * x402 Payment Proxy — CDP Facilitator (Base mainnet)
  *
- * Protects POST /api/swap/execute with a $0.10 USDC payment.
- * Uses Coinbase CDP facilitator which supports Base mainnet.
+ * Charges $0.10 USDC per swap via x402 protocol.
+ * Uses Coinbase CDP facilitator (supports Base mainnet).
  *
- * Required env vars (Vercel dashboard):
- *   CDP_API_KEY_ID         — from portal.cdp.coinbase.com
- *   CDP_API_KEY_SECRET     — EC private key (PEM) from portal.cdp.coinbase.com
+ * Required env vars (Vercel dashboard → Settings → Environment Variables):
+ *   CDP_API_KEY_ID         — Key ID from portal.cdp.coinbase.com
+ *   CDP_API_KEY_SECRET     — PEM EC private key from portal.cdp.coinbase.com
  *   PAYMENT_WALLET_ADDRESS — EIP-55 checksummed address to receive USDC
- *   NEXT_PUBLIC_APP_URL    — public HTTPS URL (not localhost)
+ *   NEXT_PUBLIC_APP_URL    — Production HTTPS URL (e.g. https://hibra.app)
  */
 
 const CDP_FACILITATOR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402' as const
 
-const PAYMENT_WALLET = process.env.PAYMENT_WALLET_ADDRESS
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
-const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID ?? ''
-const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET ?? ''
-
-const isPublicUrl =
-  APP_URL.startsWith('https://') &&
-  !APP_URL.includes('localhost') &&
-  !APP_URL.includes('127.0.0.1')
-
-const isX402Enabled =
-  typeof PAYMENT_WALLET === 'string' &&
-  /^0x[0-9a-fA-F]{40}$/.test(PAYMENT_WALLET) &&
-  isPublicUrl &&
-  CDP_API_KEY_ID.length > 0 &&
-  CDP_API_KEY_SECRET.length > 0
-
 /**
- * Generate a CDP-signed JWT for authenticating with the facilitator.
- * CDP uses ES256 (EC P-256) or Ed25519. We use jose which works in both
- * Node.js and Edge runtime.
+ * Build a CDP-authenticated JWT for a single request.
+ * Uses jose (Edge + Node.js compatible).
  */
-async function generateCdpJwt(method: string, path: string): Promise<string> {
+async function generateCdpJwt(
+  apiKeyId: string,
+  apiKeySecret: string,
+  method: string,
+  path: string
+): Promise<string> {
   const { SignJWT, importPKCS8 } = await import('jose')
 
   const nonce = Array.from(
@@ -47,33 +34,29 @@ async function generateCdpJwt(method: string, path: string): Promise<string> {
   ).join('')
 
   const now = Math.floor(Date.now() / 1000)
-
-  // CDP API secret is a PEM EC private key — parse newlines escaped as \n
-  const pemKey = CDP_API_KEY_SECRET.replace(/\\n/g, '\n')
-
+  // Vercel stores multi-line PEM as literal \n — restore real newlines
+  const pemKey = apiKeySecret.replace(/\\n/g, '\n')
   const privateKey = await importPKCS8(pemKey, 'ES256')
 
-  const jwt = await new SignJWT({
-    sub: CDP_API_KEY_ID,
+  return new SignJWT({
+    sub: apiKeyId,
     iss: 'cdp',
     uris: [`${method} api.cdp.coinbase.com${path}`],
   })
-    .setProtectedHeader({ alg: 'ES256', kid: CDP_API_KEY_ID, nonce })
+    .setProtectedHeader({ alg: 'ES256', kid: apiKeyId, nonce })
     .setIssuedAt(now)
     .setExpirationTime(now + 120)
     .sign(privateKey)
-
-  return jwt
 }
 
-function createCdpFacilitator() {
+function buildCdpFacilitator(apiKeyId: string, apiKeySecret: string) {
   return {
     url: CDP_FACILITATOR_URL,
     createAuthHeaders: async () => {
       const [verifyJwt, settleJwt, supportedJwt] = await Promise.all([
-        generateCdpJwt('POST', '/platform/v2/x402/verify'),
-        generateCdpJwt('POST', '/platform/v2/x402/settle'),
-        generateCdpJwt('GET',  '/platform/v2/x402/supported'),
+        generateCdpJwt(apiKeyId, apiKeySecret, 'POST', '/platform/v2/x402/verify'),
+        generateCdpJwt(apiKeyId, apiKeySecret, 'POST', '/platform/v2/x402/settle'),
+        generateCdpJwt(apiKeyId, apiKeySecret, 'GET',  '/platform/v2/x402/supported'),
       ])
       return {
         verify:    { Authorization: `Bearer ${verifyJwt}` },
@@ -84,27 +67,51 @@ function createCdpFacilitator() {
   }
 }
 
-const x402Handler = isX402Enabled
-  ? paymentMiddleware(
-      PAYMENT_WALLET as `0x${string}`,
-      {
-        '/api/swap/execute': {
-          price: '$0.10',
-          network: 'base',
-          config: {
-            description: 'Hibra AI Swap — best route on Base network',
-          },
+function buildX402Handler() {
+  const paymentWallet = process.env.PAYMENT_WALLET_ADDRESS ?? ''
+  const appUrl        = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  const cdpKeyId      = process.env.CDP_API_KEY_ID ?? ''
+  const cdpKeySecret  = process.env.CDP_API_KEY_SECRET ?? ''
+
+  const isValidWallet = /^0x[0-9a-fA-F]{40}$/.test(paymentWallet)
+  const isPublicUrl   = appUrl.startsWith('https://') && !appUrl.includes('localhost')
+  const hasCdpKeys    = cdpKeyId.length > 0 && cdpKeySecret.length > 0
+
+  if (!isValidWallet || !isPublicUrl || !hasCdpKeys) {
+    return null
+  }
+
+  return paymentMiddleware(
+    paymentWallet as `0x${string}`,
+    {
+      '/api/swap/execute': {
+        price: '$0.10',
+        network: 'base',
+        config: {
+          description: 'Hibra AI Swap — best route on Base network',
         },
       },
-      createCdpFacilitator()
-    )
-  : null
+    },
+    buildCdpFacilitator(cdpKeyId, cdpKeySecret)
+  )
+}
 
-export default async function middleware(request: NextRequest) {
-  if (x402Handler) {
-    return x402Handler(request)
+// Lazy-init: evaluated at runtime so env vars are always available
+let _handler: ReturnType<typeof paymentMiddleware> | null | undefined = undefined
+
+function getHandler() {
+  if (_handler === undefined) {
+    _handler = buildX402Handler()
   }
-  // x402 disabled — missing env vars or running on localhost
+  return _handler
+}
+
+export default async function proxy(request: NextRequest) {
+  const handler = getHandler()
+  if (handler) {
+    return handler(request)
+  }
+  // x402 not configured — pass through
   return NextResponse.next()
 }
 
