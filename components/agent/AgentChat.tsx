@@ -118,7 +118,7 @@ export function AgentChat() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
-      height: 'calc(100vh - 180px)', minHeight: '500px',
+      height: 'calc(100vh - 220px)', minHeight: '500px',
       maxWidth: '720px', margin: '0 auto',
     }}>
 
@@ -238,7 +238,7 @@ export function AgentChat() {
 
       {/* Input area */}
       <div style={{
-        padding: '12px 16px',
+        padding: '12px 16px 24px 16px',
         borderTop: '1px solid var(--border)',
         background: 'rgba(13, 13, 26, 0.8)',
         backdropFilter: 'blur(8px)',
@@ -280,6 +280,13 @@ export function AgentChat() {
             )}
             Send
           </button>
+        </div>
+        <div style={{
+          fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px',
+          paddingLeft: '2px', display: 'flex', alignItems: 'center', gap: '4px',
+        }}>
+          <span style={{ color: 'var(--purple-light)', fontWeight: 500 }}>ⓘ</span>
+          A fee of 0.1 USDC will be charged for each approved transaction.
         </div>
       </div>
 
