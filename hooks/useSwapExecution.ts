@@ -112,7 +112,15 @@ export function useSwapExecution() {
 
         // ── x402 payment flow ─────────────────────────────────────────────────
         if (calldataRes.status === 402) {
-          if (!walletClient) {
+          // walletClient may still be loading — wait up to 3s for it
+          let wc = walletClient
+          if (!wc) {
+            for (let i = 0; i < 15; i++) {
+              await new Promise(r => setTimeout(r, 200))
+              if (walletClient) { wc = walletClient; break }
+            }
+          }
+          if (!wc) {
             toast.error('Wallet not ready for x402 payment')
             setStatus('error')
             return
@@ -140,7 +148,7 @@ export function useSwapExecution() {
           // walletClient satisfies x402's SignerWallet at runtime (has chain, transport, signTypedData)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const paymentHeader = await createPaymentHeader(
-            walletClient as unknown as Parameters<typeof createPaymentHeader>[0],
+            wc as unknown as Parameters<typeof createPaymentHeader>[0],
             paymentRequiredBody.x402Version,
             selected
           )
