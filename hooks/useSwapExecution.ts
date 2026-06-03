@@ -22,6 +22,8 @@ interface SwapExecutionParams {
   amountIn: string
   quote: QuoteResult
   slippage: number
+  /** Override the execute endpoint. Defaults to /api/swap/execute (x402 paid). */
+  executeUrl?: string
 }
 
 type SwapStatus = 'idle' | 'approving' | 'swapping' | 'success' | 'error'
@@ -68,7 +70,7 @@ export function useSwapExecution() {
         return
       }
 
-      const { tokenIn, tokenOut, amountIn, quote, slippage } = params
+      const { tokenIn, tokenOut, amountIn, quote, slippage, executeUrl: customExecuteUrl } = params
       const amountInParsed = parseTokenAmount(amountIn, tokenIn.decimals)
       const isETHIn = tokenIn.address === TOKEN_ADDRESSES.ETH
 
@@ -80,11 +82,11 @@ export function useSwapExecution() {
           await approveToken(tokenIn.address as `0x${string}`, routerAddress, amountInParsed)
         }
 
-        // ── Step 2: Get calldata via x402-protected execute endpoint ──────────
+        // ── Step 2: Get calldata ──────────────────────────────────────────────
         setStatus('swapping')
         toast.loading('Preparing swap…', { id: 'swap' })
 
-        const executeUrl = '/api/swap/execute'
+        const executeUrl = customExecuteUrl ?? '/api/swap/execute'
         const executeBody = JSON.stringify({
           tokenIn: tokenIn.address,
           tokenOut: tokenOut.address,

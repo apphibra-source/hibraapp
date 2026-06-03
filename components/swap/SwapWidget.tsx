@@ -66,6 +66,7 @@ export function SwapWidget() {
       amountIn,
       quote: selectedQuote,
       slippage,
+      executeUrl: '/api/swap/execute-free', // /swap page: no x402 fee
     })
   }, [selectedQuote, executeSwap, tokenIn, tokenOut, amountIn, slippage])
 
