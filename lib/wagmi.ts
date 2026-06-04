@@ -13,14 +13,8 @@ import {
   braveWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import { baseAccount } from 'wagmi/connectors'
-import { Attribution } from 'ox/erc8021'
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? ''
-
-// ── Builder Code (base.dev attribution) ───────────────────────────────────
-const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'
-
-const DATA_SUFFIX = Attribution.toDataSuffix({ codes: [BUILDER_CODE] })
 
 // ── Connectors ─────────────────────────────────────────────────────────────
 const connectors = connectorsForWallets(
@@ -28,7 +22,7 @@ const connectors = connectorsForWallets(
     {
       groupName: 'Browser Wallets',
       wallets: [
-        injectedWallet,   // catches MetaMask, Rabby, Brave and any EIP-1193 extension
+        injectedWallet,
         rabbyWallet,
         braveWallet,
         phantomWallet,
@@ -52,11 +46,12 @@ const connectors = connectorsForWallets(
 )
 
 // ── Config ─────────────────────────────────────────────────────────────────
+// Note: ERC-8021 builder code attribution is applied manually in useSwapExecution.ts
+// because wagmi 3.x does not support dataSuffix in createConfig.
 export const config = createConfig({
   chains: [base, baseSepolia],
   connectors: [
     ...connectors,
-    // Base Account connector — enables Base App wallet connection
     baseAccount({
       appName: 'Hibra',
       appLogoUrl: 'https://hibra.app/hibra-logo.svg',
@@ -72,6 +67,4 @@ export const config = createConfig({
       process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL ?? 'https://sepolia.base.org'
     ),
   },
-  // Builder Code attribution — appended to all transactions automatically
-  dataSuffix: DATA_SUFFIX,
 })

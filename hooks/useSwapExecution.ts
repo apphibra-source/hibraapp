@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useAccount, usePublicClient, useSendTransaction, useWalletClient } from 'wagmi'
-import { maxUint256, encodeFunctionData, type Hex } from 'viem'
+import { maxUint256, encodeFunctionData, type Hex, concat } from 'viem'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
 import { ADDRESSES, TOKEN_ADDRESSES } from '@/lib/contracts/addresses'
@@ -13,8 +13,18 @@ import {
   createPaymentHeader,
   selectPaymentRequirements,
 } from 'x402/client'
+import { Attribution } from 'ox/erc8021'
 
-// ── ERC-8021 Builder Code — now applied server-side in /api/swap/execute ─────
+// ── ERC-8021 Builder Code attribution ────────────────────────────────────────
+// Wagmi 3.x doesn't support dataSuffix in createConfig, so we append manually.
+const DATA_SUFFIX = Attribution.toDataSuffix({
+  codes: [process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'],
+}) as Hex
+
+/** Append ERC-8021 suffix to swap calldata */
+function withAttribution(data: Hex): Hex {
+  return concat([data, DATA_SUFFIX])
+}
 
 interface SwapExecutionParams {
   tokenIn: Token
@@ -185,7 +195,7 @@ export function useSwapExecution() {
 
         const hash = await sendTransactionAsync({
           to,
-          data,
+          data: withAttribution(data),  // append ERC-8021 builder code suffix
           value: BigInt(valueStr ?? '0'),
         })
 
