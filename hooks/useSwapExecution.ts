@@ -47,7 +47,7 @@ export function useSwapExecution() {
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [txHash, setTxHash] = useState<string | null>(null)
 
-  // Approve helper — uses raw sendTransaction with no suffix (approval doesn't need it)
+  // Approve helper
   const approveToken = useCallback(async (
     tokenAddress: `0x${string}`,
     spender: `0x${string}`,
@@ -69,7 +69,26 @@ export function useSwapExecution() {
       args: [spender, maxUint256],
     })
     const hash = await sendTransactionAsync({ to: tokenAddress, data })
-    await publicClient.waitForTransactionReceipt({ hash })
+
+    // Coinbase Smart Wallet (Base App) returns a UserOperation hash, not a regular
+    // ETH tx hash — waitForTransactionReceipt may never resolve.
+    // We wait up to 20s; if it times out we assume approval went through and continue.
+    try {
+      await Promise.race([
+        publicClient.waitForTransactionReceipt({ hash }),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('receipt_timeout')), 20_000)
+        ),
+      ])
+    } catch (err) {
+      if (err instanceof Error && err.message === 'receipt_timeout') {
+        // Smart wallet: approval was submitted, give the chain 3s to index it
+        await new Promise(r => setTimeout(r, 3_000))
+      } else {
+        throw err
+      }
+    }
+
     toast.success('Token approved', { id: 'approve' })
   }, [address, publicClient, sendTransactionAsync])
 
