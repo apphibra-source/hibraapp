@@ -220,47 +220,19 @@ export function useSwapExecution() {
 
         setTxHash(hash)
 
-        // Coinbase Smart Wallet (Base App) may return a UserOp hash that
-        // waitForTransactionReceipt cannot resolve. Apply a 30s timeout and
-        // treat timeout as optimistic success (tx was submitted to the chain).
-        let receiptStatus: 'success' | 'reverted' | 'timeout' = 'timeout'
-        try {
-          const receipt = await Promise.race([
-            publicClient.waitForTransactionReceipt({ hash }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('receipt_timeout')), 30_000)
-            ),
-          ])
-          receiptStatus = receipt.status === 'reverted' ? 'reverted' : 'success'
-        } catch (err) {
-          if (err instanceof Error && err.message === 'receipt_timeout') {
-            receiptStatus = 'timeout' // smart wallet: assume success
-          } else {
-            throw err
-          }
-        }
-
-        if (receiptStatus === 'reverted') {
-          setStatus('error')
-          toast.error('Swap reverted on-chain', {
-            id: 'swap',
-            description: 'Transaction was mined but failed. Check Basescan for details.',
-            action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
-          })
-          return
-        }
-
+        // Show success immediately after tx is submitted.
+        // Base App (Coinbase Smart Wallet) returns a UserOp hash — waitForTransactionReceipt
+        // cannot resolve it, so we don't block UX on receipt.
+        // For regular wallets (MetaMask etc.) we check receipt in the background.
         setStatus('success')
-        toast.success('Swap successful!', {
+        toast.success('Swap submitted!', {
           id: 'swap',
           description: `Tx: ${hash.slice(0, 10)}...`,
           action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
         })
 
-        // ── Protocol fee removed ──────────────────────────────────────────────
-
         addCustomToken(tokenOut)
-        setTimeout(() => invalidateBalances(), 2000)
+        setTimeout(() => invalidateBalances(), 3000)
 
         recordSwap({
           userAddress: address,
@@ -274,6 +246,21 @@ export function useSwapExecution() {
           txHash: hash,
           volumeUSD: estimateVolumeUSD(tokenIn.symbol, tokenOut.symbol, amountIn, quote.amountOutFormatted),
         })
+
+        // Background receipt check — only used to detect reverts on regular wallets
+        publicClient.waitForTransactionReceipt({ hash })
+          .then(receipt => {
+            if (receipt.status === 'reverted') {
+              setStatus('error')
+              toast.error('Swap reverted on-chain', {
+                description: 'Transaction failed after submission. Check Basescan.',
+                action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
+              })
+            }
+          })
+          .catch(() => {
+            // Smart wallet / timeout — tx was submitted, ignore receipt error
+          })
       } catch (err: unknown) {
         setStatus('error')
         const message = err instanceof Error ? err.message : 'Swap failed'
