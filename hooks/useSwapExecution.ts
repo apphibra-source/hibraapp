@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, usePublicClient, useSendTransaction, useWalletClient } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction, useWalletClient, useConnectorClient } from 'wagmi'
 import { maxUint256, encodeFunctionData, type Hex, concat } from 'viem'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
@@ -16,12 +16,10 @@ import {
 import { Attribution } from 'ox/erc8021'
 
 // ── ERC-8021 Builder Code attribution ────────────────────────────────────────
-// Wagmi 3.x doesn't support dataSuffix in createConfig, so we append manually.
 const DATA_SUFFIX = Attribution.toDataSuffix({
   codes: [process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'],
 }) as Hex
 
-/** Append ERC-8021 suffix to swap calldata */
 function withAttribution(data: Hex): Hex {
   return concat([data, DATA_SUFFIX])
 }
@@ -32,7 +30,6 @@ interface SwapExecutionParams {
   amountIn: string
   quote: QuoteResult
   slippage: number
-  /** Override the execute endpoint. Defaults to /api/swap/execute (x402 paid). */
   executeUrl?: string
 }
 
@@ -43,54 +40,48 @@ export function useSwapExecution() {
   const publicClient = usePublicClient()
   const { sendTransactionAsync } = useSendTransaction()
   const { data: walletClient } = useWalletClient()
+  const { data: connectorClient } = useConnectorClient()
   const invalidateBalances = useInvalidateBalances()
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [txHash, setTxHash] = useState<string | null>(null)
 
-  // Approve helper
-  const approveToken = useCallback(async (
-    tokenAddress: `0x${string}`,
-    spender: `0x${string}`,
-    amount: bigint
-  ) => {
-    if (!address || !publicClient) return
-    const allowance = await publicClient.readContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: 'allowance',
-      args: [address, spender],
-    }) as bigint
-    if (allowance >= amount) return
-
-    toast.loading('Approving token...', { id: 'approve' })
-    const data = encodeFunctionData({
-      abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [spender, maxUint256],
-    })
-    const hash = await sendTransactionAsync({ to: tokenAddress, data })
-
-    // Coinbase Smart Wallet (Base App) returns a UserOperation hash, not a regular
-    // ETH tx hash — waitForTransactionReceipt may never resolve.
-    // We wait up to 20s; if it times out we assume approval went through and continue.
+  /** Check if the connected wallet supports EIP-5792 wallet_sendCalls (smart wallet) */
+  const checkSendCalls = useCallback(async (): Promise<boolean> => {
+    if (!connectorClient) return false
     try {
-      await Promise.race([
-        publicClient.waitForTransactionReceipt({ hash }),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('receipt_timeout')), 20_000)
-        ),
-      ])
-    } catch (err) {
-      if (err instanceof Error && err.message === 'receipt_timeout') {
-        // Smart wallet: approval was submitted, give the chain 3s to index it
-        await new Promise(r => setTimeout(r, 3_000))
-      } else {
-        throw err
-      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const caps = await (connectorClient as any).request({
+        method: 'wallet_getCapabilities',
+        params: [address],
+      })
+      // If it returns without throwing, sendCalls is supported
+      return typeof caps === 'object' && caps !== null
+    } catch {
+      return false
     }
+  }, [connectorClient, address])
 
-    toast.success('Token approved', { id: 'approve' })
-  }, [address, publicClient, sendTransactionAsync])
+  /**
+   * Send approve + swap as a single batch (EIP-5792 wallet_sendCalls).
+   * Base App supports this natively — single popup, atomic execution.
+   */
+  const sendBatchCalls = useCallback(async (calls: Array<{ to: `0x${string}`; data: Hex; value?: bigint }>) => {
+    if (!connectorClient) throw new Error('No connector client')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (connectorClient as any).request({
+      method: 'wallet_sendCalls',
+      params: [{
+        version: '1.0',
+        from: address,
+        calls: calls.map(c => ({
+          to: c.to,
+          data: c.data,
+          value: c.value ? `0x${c.value.toString(16)}` : undefined,
+        })),
+      }],
+    }) as { id: string } | string
+    return typeof result === 'string' ? result : result.id
+  }, [connectorClient, address])
 
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
@@ -104,14 +95,7 @@ export function useSwapExecution() {
       const isETHIn = tokenIn.address === TOKEN_ADDRESSES.ETH
 
       try {
-        // ── Step 1: Approve ───────────────────────────────────────────────────
-        if (!isETHIn && quote.dex !== 'wrap') {
-          setStatus('approving')
-          const routerAddress = getRouterAddress(quote.dex)
-          await approveToken(tokenIn.address as `0x${string}`, routerAddress, amountInParsed)
-        }
-
-        // ── Step 2: Get calldata ──────────────────────────────────────────────
+        // ── Step 1: Get swap calldata ─────────────────────────────────────────
         setStatus('swapping')
         toast.loading('Preparing swap…', { id: 'swap' })
 
@@ -128,22 +112,14 @@ export function useSwapExecution() {
           userAddress: address,
         })
 
-        // First call without payment header — server responds 402 with JSON requirements.
-        // Must send Accept: application/json to prevent x402 middleware returning HTML paywall.
-        const x402Headers = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        }
-
         let calldataRes = await fetch(executeUrl, {
           method: 'POST',
-          headers: x402Headers,
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: executeBody,
         })
 
         // ── x402 payment flow ─────────────────────────────────────────────────
         if (calldataRes.status === 402) {
-          // walletClient may still be loading — wait up to 3s for it
           let wc = walletClient
           if (!wc) {
             for (let i = 0; i < 15; i++) {
@@ -157,14 +133,11 @@ export function useSwapExecution() {
             return
           }
 
-          // Parse the 402 response body to get payment requirements
           const paymentRequiredBody = await calldataRes.json() as {
             x402Version: number
             accepts: unknown[]
             error?: string
           }
-
-          // Select the best matching payment requirement (USDC on Base Sepolia)
           const requirements = paymentRequiredBody.accepts as Parameters<typeof selectPaymentRequirements>[0]
           const selected = selectPaymentRequirements(requirements)
           if (!selected) {
@@ -174,9 +147,6 @@ export function useSwapExecution() {
           }
 
           toast.loading('Approving $0.10 USDC payment…', { id: 'swap' })
-
-          // Build and sign the payment header using the user's wallet
-          // walletClient satisfies x402's SignerWallet at runtime (has chain, transport, signTypedData)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const paymentHeader = await createPaymentHeader(
             wc as unknown as Parameters<typeof createPaymentHeader>[0],
@@ -184,13 +154,9 @@ export function useSwapExecution() {
             selected
           )
 
-          // Retry with the signed X-PAYMENT header
           calldataRes = await fetch(executeUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-PAYMENT': paymentHeader,
-            },
+            headers: { 'Content-Type': 'application/json', 'X-PAYMENT': paymentHeader },
             body: executeBody,
           })
 
@@ -208,28 +174,98 @@ export function useSwapExecution() {
           data: Hex
           value: string
         }
+        const swapValue = BigInt(valueStr ?? '0')
+        const swapData = withAttribution(data)
 
-        // ── Step 3: Send the actual on-chain swap transaction ─────────────────
-        toast.loading('Sending swap transaction...', { id: 'swap' })
+        // ── Step 2: Build calls array ─────────────────────────────────────────
+        // If token needs approval, check allowance first
+        const needsApproval = !isETHIn && quote.dex !== 'wrap'
+        let hasAllowance = true
+        let routerAddress: `0x${string}` | null = null
 
-        const hash = await sendTransactionAsync({
-          to,
-          data: withAttribution(data),  // append ERC-8021 builder code suffix
-          value: BigInt(valueStr ?? '0'),
-        })
+        if (needsApproval) {
+          routerAddress = getRouterAddress(quote.dex)
+          const allowance = await publicClient.readContract({
+            address: tokenIn.address as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'allowance',
+            args: [address, routerAddress],
+          }) as bigint
+          hasAllowance = allowance >= amountInParsed
+        }
 
-        setTxHash(hash)
+        // ── Step 3: Try wallet_sendCalls (Base App / smart wallet) ────────────
+        const supportsBatch = await checkSendCalls()
 
-        // Show success immediately after tx is submitted.
-        // Base App (Coinbase Smart Wallet) returns a UserOp hash — waitForTransactionReceipt
-        // cannot resolve it, so we don't block UX on receipt.
-        // For regular wallets (MetaMask etc.) we check receipt in the background.
-        setStatus('success')
-        toast.success('Swap submitted!', {
-          id: 'swap',
-          description: `Tx: ${hash.slice(0, 10)}...`,
-          action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
-        })
+        if (supportsBatch) {
+          // Single popup for everything — approve + swap atomically
+          const calls: Array<{ to: `0x${string}`; data: Hex; value?: bigint }> = []
+
+          if (needsApproval && !hasAllowance && routerAddress) {
+            const approveData = encodeFunctionData({
+              abi: ERC20_ABI,
+              functionName: 'approve',
+              args: [routerAddress, maxUint256],
+            })
+            calls.push({ to: tokenIn.address as `0x${string}`, data: approveData })
+          }
+
+          calls.push({ to, data: swapData, value: swapValue > 0n ? swapValue : undefined })
+
+          toast.loading('Confirm in wallet…', { id: 'swap' })
+          const batchId = await sendBatchCalls(calls)
+          setTxHash(batchId)
+
+          setStatus('success')
+          toast.success('Swap submitted!', {
+            id: 'swap',
+            description: `Batch: ${batchId.slice(0, 10)}...`,
+          })
+
+        } else {
+          // ── Fallback: sequential sendTransaction (MetaMask / EOA) ─────────────
+          if (needsApproval && !hasAllowance && routerAddress) {
+            setStatus('approving')
+            toast.loading('Approving token...', { id: 'approve' })
+            const approveData = encodeFunctionData({
+              abi: ERC20_ABI,
+              functionName: 'approve',
+              args: [routerAddress, maxUint256],
+            })
+            const approveHash = await sendTransactionAsync({
+              to: tokenIn.address as `0x${string}`,
+              data: approveData,
+            })
+            // Wait for approval receipt (EOA wallets resolve this quickly)
+            await publicClient.waitForTransactionReceipt({ hash: approveHash })
+            toast.success('Token approved', { id: 'approve' })
+          }
+
+          setStatus('swapping')
+          toast.loading('Sending swap transaction...', { id: 'swap' })
+          const hash = await sendTransactionAsync({ to, data: swapData, value: swapValue })
+          setTxHash(hash)
+
+          setStatus('success')
+          toast.success('Swap submitted!', {
+            id: 'swap',
+            description: `Tx: ${hash.slice(0, 10)}...`,
+            action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
+          })
+
+          // Background receipt check for reverts on EOA wallets
+          publicClient.waitForTransactionReceipt({ hash })
+            .then(receipt => {
+              if (receipt.status === 'reverted') {
+                setStatus('error')
+                toast.error('Swap reverted on-chain', {
+                  description: 'Check Basescan for details.',
+                  action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
+                })
+              }
+            })
+            .catch(() => { /* ignore */ })
+        }
 
         addCustomToken(tokenOut)
         setTimeout(() => invalidateBalances(), 3000)
@@ -243,31 +279,17 @@ export function useSwapExecution() {
           amountIn,
           amountOut: quote.amountOutFormatted,
           dex: quote.dex,
-          txHash: hash,
+          txHash: txHash ?? '',
           volumeUSD: estimateVolumeUSD(tokenIn.symbol, tokenOut.symbol, amountIn, quote.amountOutFormatted),
         })
 
-        // Background receipt check — only used to detect reverts on regular wallets
-        publicClient.waitForTransactionReceipt({ hash })
-          .then(receipt => {
-            if (receipt.status === 'reverted') {
-              setStatus('error')
-              toast.error('Swap reverted on-chain', {
-                description: 'Transaction failed after submission. Check Basescan.',
-                action: { label: 'View', onClick: () => window.open(`https://basescan.org/tx/${hash}`, '_blank') },
-              })
-            }
-          })
-          .catch(() => {
-            // Smart wallet / timeout — tx was submitted, ignore receipt error
-          })
       } catch (err: unknown) {
         setStatus('error')
         const message = err instanceof Error ? err.message : 'Swap failed'
         toast.error('Swap failed', { id: 'swap', description: message.slice(0, 100) })
       }
     },
-    [address, publicClient, sendTransactionAsync, walletClient, approveToken, invalidateBalances]
+    [address, publicClient, sendTransactionAsync, walletClient, connectorClient, checkSendCalls, sendBatchCalls, invalidateBalances, txHash]
   )
 
   const reset = useCallback(() => {
