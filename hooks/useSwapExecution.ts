@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, usePublicClient, useSendTransaction, useWalletClient, useConnectorClient } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction, useWalletClient } from 'wagmi'
 import { maxUint256, encodeFunctionData, type Hex, concat } from 'viem'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
@@ -35,40 +35,26 @@ interface SwapExecutionParams {
 
 type SwapStatus = 'idle' | 'approving' | 'swapping' | 'success' | 'error'
 
+/** Smart wallet connector IDs that support wallet_sendCalls */
+const SMART_WALLET_IDS = new Set(['baseAccount', 'coinbaseWalletSDK', 'smartWallet'])
+
 export function useSwapExecution() {
-  const { address } = useAccount()
+  const { address, connector } = useAccount()
   const publicClient = usePublicClient()
   const { sendTransactionAsync } = useSendTransaction()
   const { data: walletClient } = useWalletClient()
-  const { data: connectorClient } = useConnectorClient()
   const invalidateBalances = useInvalidateBalances()
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [txHash, setTxHash] = useState<string | null>(null)
 
-  /** Check if the connected wallet supports EIP-5792 wallet_sendCalls (smart wallet) */
-  const checkSendCalls = useCallback(async (): Promise<boolean> => {
-    if (!connectorClient) return false
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const caps = await (connectorClient as any).request({
-        method: 'wallet_getCapabilities',
-        params: [address],
-      })
-      // If it returns without throwing, sendCalls is supported
-      return typeof caps === 'object' && caps !== null
-    } catch {
-      return false
-    }
-  }, [connectorClient, address])
+  /** True if the connected wallet is a smart wallet supporting wallet_sendCalls */
+  const isSmartWallet = connector?.id ? SMART_WALLET_IDS.has(connector.id) : false
 
-  /**
-   * Send approve + swap as a single batch (EIP-5792 wallet_sendCalls).
-   * Base App supports this natively — single popup, atomic execution.
-   */
+  /** Send a batch of calls via wallet_sendCalls (EIP-5792) */
   const sendBatchCalls = useCallback(async (calls: Array<{ to: `0x${string}`; data: Hex; value?: bigint }>) => {
-    if (!connectorClient) throw new Error('No connector client')
+    if (!walletClient) throw new Error('No wallet client')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (connectorClient as any).request({
+    const result = await (walletClient as any).request({
       method: 'wallet_sendCalls',
       params: [{
         version: '1.0',
@@ -76,12 +62,12 @@ export function useSwapExecution() {
         calls: calls.map(c => ({
           to: c.to,
           data: c.data,
-          value: c.value ? `0x${c.value.toString(16)}` : undefined,
+          ...(c.value && c.value > 0n ? { value: `0x${c.value.toString(16)}` } : {}),
         })),
       }],
     }) as { id: string } | string
     return typeof result === 'string' ? result : result.id
-  }, [connectorClient, address])
+  }, [walletClient, address])
 
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
@@ -195,7 +181,8 @@ export function useSwapExecution() {
         }
 
         // ── Step 3: Try wallet_sendCalls (Base App / smart wallet) ────────────
-        const supportsBatch = await checkSendCalls()
+        // Use connector ID to detect smart wallet — no RPC call needed, avoids popup
+        const supportsBatch = isSmartWallet
 
         if (supportsBatch) {
           // Single popup for everything — approve + swap atomically
@@ -289,7 +276,7 @@ export function useSwapExecution() {
         toast.error('Swap failed', { id: 'swap', description: message.slice(0, 100) })
       }
     },
-    [address, publicClient, sendTransactionAsync, walletClient, connectorClient, checkSendCalls, sendBatchCalls, invalidateBalances, txHash]
+    [address, publicClient, sendTransactionAsync, walletClient, invalidateBalances, txHash, isSmartWallet, sendBatchCalls]
   )
 
   const reset = useCallback(() => {
