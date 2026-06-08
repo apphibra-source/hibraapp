@@ -219,9 +219,28 @@ export function useSwapExecution() {
         })
 
         setTxHash(hash)
-        const receipt = await publicClient.waitForTransactionReceipt({ hash })
 
-        if (receipt.status === 'reverted') {
+        // Coinbase Smart Wallet (Base App) may return a UserOp hash that
+        // waitForTransactionReceipt cannot resolve. Apply a 30s timeout and
+        // treat timeout as optimistic success (tx was submitted to the chain).
+        let receiptStatus: 'success' | 'reverted' | 'timeout' = 'timeout'
+        try {
+          const receipt = await Promise.race([
+            publicClient.waitForTransactionReceipt({ hash }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('receipt_timeout')), 30_000)
+            ),
+          ])
+          receiptStatus = receipt.status === 'reverted' ? 'reverted' : 'success'
+        } catch (err) {
+          if (err instanceof Error && err.message === 'receipt_timeout') {
+            receiptStatus = 'timeout' // smart wallet: assume success
+          } else {
+            throw err
+          }
+        }
+
+        if (receiptStatus === 'reverted') {
           setStatus('error')
           toast.error('Swap reverted on-chain', {
             id: 'swap',
