@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, usePublicClient, useSendTransaction, useWalletClient } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction, useWalletClient, useSendCalls } from 'wagmi'
 import { maxUint256, encodeFunctionData, type Hex, concat } from 'viem'
 import { toast } from 'sonner'
 import type { Token, QuoteResult } from '@/types'
@@ -43,31 +43,13 @@ export function useSwapExecution() {
   const publicClient = usePublicClient()
   const { sendTransactionAsync } = useSendTransaction()
   const { data: walletClient } = useWalletClient()
+  const { sendCallsAsync } = useSendCalls()
   const invalidateBalances = useInvalidateBalances()
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [txHash, setTxHash] = useState<string | null>(null)
 
   /** True if the connected wallet is a smart wallet supporting wallet_sendCalls */
   const isSmartWallet = connector?.id ? SMART_WALLET_IDS.has(connector.id) : false
-
-  /** Send a batch of calls via wallet_sendCalls (EIP-5792) */
-  const sendBatchCalls = useCallback(async (calls: Array<{ to: `0x${string}`; data: Hex; value?: bigint }>) => {
-    if (!walletClient) throw new Error('No wallet client')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (walletClient as any).request({
-      method: 'wallet_sendCalls',
-      params: [{
-        version: '1.0',
-        from: address,
-        calls: calls.map(c => ({
-          to: c.to,
-          data: c.data,
-          ...(c.value && c.value > 0n ? { value: `0x${c.value.toString(16)}` } : {}),
-        })),
-      }],
-    }) as { id: string } | string
-    return typeof result === 'string' ? result : result.id
-  }, [walletClient, address])
 
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
@@ -200,7 +182,15 @@ export function useSwapExecution() {
           calls.push({ to, data: swapData, value: swapValue > 0n ? swapValue : undefined })
 
           toast.loading('Confirm in wallet…', { id: 'swap' })
-          const batchId = await sendBatchCalls(calls)
+          // Use wagmi's sendCallsAsync — properly handles Base Account's EIP-5792
+          const batchResult = await sendCallsAsync({
+            calls: calls.map(c => ({
+              to: c.to,
+              data: c.data,
+              ...(c.value && c.value > 0n ? { value: c.value } : {}),
+            })),
+          })
+          const batchId = typeof batchResult === 'string' ? batchResult : batchResult.id
           setTxHash(batchId)
 
           setStatus('success')
@@ -276,7 +266,7 @@ export function useSwapExecution() {
         toast.error('Swap failed', { id: 'swap', description: message.slice(0, 100) })
       }
     },
-    [address, publicClient, sendTransactionAsync, walletClient, invalidateBalances, txHash, isSmartWallet, sendBatchCalls]
+    [address, publicClient, sendTransactionAsync, sendCallsAsync, invalidateBalances, txHash, isSmartWallet]
   )
 
   const reset = useCallback(() => {
