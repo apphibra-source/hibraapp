@@ -118,7 +118,13 @@ export async function executeSwapHandler(request: NextRequest): Promise<NextResp
       }
     }
 
-    return NextResponse.json({ to: to!, data: data!, value })
+    return NextResponse.json({
+      to: to!,
+      data: data!,
+      value,
+      // WETH wrap/unwrap: do NOT append ERC-8021 suffix — WETH reverts on unknown calldata
+      skipAttribution: dex === 'wrap',
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })

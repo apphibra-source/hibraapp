@@ -137,13 +137,15 @@ export function useSwapExecution() {
           throw new Error(err.error ?? `Execute endpoint returned ${calldataRes.status}`)
         }
 
-        const { to, data, value: valueStr } = await calldataRes.json() as {
+        const { to, data, value: valueStr, skipAttribution } = await calldataRes.json() as {
           to: `0x${string}`
           data: Hex
           value: string
+          skipAttribution?: boolean
         }
         const swapValue = BigInt(valueStr ?? '0')
-        const swapData = withAttribution(data)
+        // WETH wrap/unwrap: don't append suffix — WETH contract reverts on unknown calldata
+        const swapData = skipAttribution ? data : withAttribution(data)
 
         // ── Step 2: Build calls array ─────────────────────────────────────────
         // If token needs approval, check allowance first
