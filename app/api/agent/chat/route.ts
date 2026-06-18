@@ -2,10 +2,10 @@ import { type NextRequest } from 'next/server'
 import OpenAI from 'openai'
 import type { QuoteResult } from '@/types'
 
-// xAI Grok — OpenAI-compatible API
+// Groq — OpenAI-compatible API
 const client = new OpenAI({
-  apiKey: process.env.XAI_API_KEY,
-  baseURL: 'https://api.x.ai/v1',
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1',
 })
 
 // ── Tool definitions (OpenAI function_call format) ────────────────────────────
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
     // ── Agentic loop ──────────────────────────────────────────────────────────
     while (true) {
       const response = await client.chat.completions.create({
-        model: 'grok-3',
+        model: 'llama-3.3-70b-versatile',
         max_tokens: 1024,
         tools,
         messages,

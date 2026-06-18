@@ -35,29 +35,77 @@ export function LeaderboardTable() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 20px',
-          borderRadius: '14px',
-          background: 'rgba(124, 92, 252, 0.08)',
-          border: '1px solid rgba(124, 92, 252, 0.3)',
+          padding: '18px 24px',
+          borderRadius: '16px',
+          background: 'rgba(124, 92, 252, 0.10)',
+          border: '1px solid rgba(124, 92, 252, 0.35)',
           marginBottom: '20px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <span style={{ fontSize: '28px' }}>🏆</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Trophy icon */}
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              background: 'rgba(124, 92, 252, 0.18)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              flexShrink: 0,
+            }}
+          >
+            🏆
+          </div>
           <div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: '4px',
+              }}
+            >
               Your rank
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--purple-light)' }}>
+            <div
+              style={{
+                fontSize: '28px',
+                fontWeight: 800,
+                color: 'var(--purple-light)',
+                lineHeight: 1,
+              }}
+            >
               {myEntry ? `#${myEntry.rank}` : '—'}
             </div>
           </div>
         </div>
+
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+          <div
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              marginBottom: '4px',
+            }}
+          >
             Points
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--purple-light)' }}>
+          <div
+            style={{
+              fontSize: '28px',
+              fontWeight: 800,
+              color: 'var(--purple-light)',
+              lineHeight: 1,
+            }}
+          >
             {myEntry ? formatCompact(myEntry.score) : '0'}
           </div>
         </div>
@@ -256,7 +304,7 @@ export function LeaderboardTable() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            marginTop: '20px',
+            marginTop: '24px',
             flexWrap: 'wrap',
           }}
         >
@@ -265,14 +313,16 @@ export function LeaderboardTable() {
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
             style={{
-              padding: '7px 14px',
-              borderRadius: '8px',
+              padding: '8px 16px',
+              borderRadius: '10px',
               border: '1px solid var(--border)',
               background: 'var(--bg-card2)',
               color: page === 1 ? 'var(--text-muted)' : 'var(--text-main)',
               cursor: page === 1 ? 'not-allowed' : 'pointer',
-              fontSize: '13px',
+              fontSize: '14px',
+              fontWeight: 500,
               opacity: page === 1 ? 0.4 : 1,
+              transition: 'all 0.15s',
             }}
           >
             ‹ Prev
@@ -281,7 +331,10 @@ export function LeaderboardTable() {
           {/* Page numbers */}
           {buildPageNumbers(page, totalPages).map((p, i) =>
             p === '...' ? (
-              <span key={`ellipsis-${i}`} style={{ color: 'var(--text-muted)', fontSize: '13px', padding: '0 4px' }}>
+              <span
+                key={`ellipsis-${i}`}
+                style={{ color: 'var(--text-muted)', fontSize: '14px', padding: '0 4px' }}
+              >
                 …
               </span>
             ) : (
@@ -289,16 +342,17 @@ export function LeaderboardTable() {
                 key={p}
                 onClick={() => setPage(p as number)}
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
                   border: '1px solid',
                   borderColor: p === page ? 'var(--purple)' : 'var(--border)',
-                  background: p === page ? 'rgba(124, 92, 252, 0.15)' : 'var(--bg-card2)',
+                  background: p === page ? 'rgba(124, 92, 252, 0.20)' : 'var(--bg-card2)',
                   color: p === page ? 'var(--purple-light)' : 'var(--text-main)',
                   cursor: 'pointer',
-                  fontSize: '13px',
+                  fontSize: '14px',
                   fontWeight: p === page ? 700 : 400,
+                  transition: 'all 0.15s',
                 }}
               >
                 {p}
@@ -311,14 +365,16 @@ export function LeaderboardTable() {
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
             style={{
-              padding: '7px 14px',
-              borderRadius: '8px',
+              padding: '8px 16px',
+              borderRadius: '10px',
               border: '1px solid var(--border)',
               background: 'var(--bg-card2)',
               color: page === totalPages ? 'var(--text-muted)' : 'var(--text-main)',
               cursor: page === totalPages ? 'not-allowed' : 'pointer',
-              fontSize: '13px',
+              fontSize: '14px',
+              fontWeight: 500,
               opacity: page === totalPages ? 0.4 : 1,
+              transition: 'all 0.15s',
             }}
           >
             Next ›
@@ -328,7 +384,14 @@ export function LeaderboardTable() {
 
       {/* Page info */}
       {total > 0 && (
-        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
+        <div
+          style={{
+            textAlign: 'center',
+            marginTop: '12px',
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+          }}
+        >
           Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total} traders
         </div>
       )}
