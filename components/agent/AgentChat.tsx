@@ -39,10 +39,8 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  'Swap 0.01 ETH to USDC',
-  'Find the best rate for USDC to AERO',
-  'What is the current rate for ETH?',
-  'Swap 10 USDC to BRETT',
+  'Swap 5 USDC to ETH',
+  'Swap 0.005 ETH to ZORA',
 ]
 
 export function AgentChat() {
