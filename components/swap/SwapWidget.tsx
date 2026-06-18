@@ -224,16 +224,6 @@ export function SwapWidget() {
         </div>
       </div>
 
-      {/* Route comparison */}
-      {(quotes.length > 0 || (quotesLoading && hasAmount)) && (
-        <RouteDisplay
-          quotes={quotes}
-          selectedDex={selectedDex ?? bestQuote?.dex ?? null}
-          onSelect={setSelectedDex}
-          isLoading={quotesLoading && quotes.length === 0}
-        />
-      )}
-
       {/* Swap button */}
       {!isConnected ? (
         <ConnectButton.Custom>
@@ -269,6 +259,16 @@ export function SwapWidget() {
             'Swap'
           )}
         </button>
+      )}
+
+      {/* Route comparison */}
+      {(quotes.length > 0 || (quotesLoading && hasAmount)) && (
+        <RouteDisplay
+          quotes={quotes}
+          selectedDex={selectedDex ?? bestQuote?.dex ?? null}
+          onSelect={setSelectedDex}
+          isLoading={quotesLoading && quotes.length === 0}
+        />
       )}
 
       {/* Confirm modal */}
