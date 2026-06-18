@@ -35,20 +35,20 @@ export function LeaderboardTable() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '18px 24px',
-          borderRadius: '16px',
+          padding: '14px 18px',
+          borderRadius: '12px',
           background: 'rgba(124, 92, 252, 0.10)',
           border: '1px solid rgba(124, 92, 252, 0.35)',
-          marginBottom: '20px',
+          marginBottom: '16px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {/* Trophy icon */}
           <div
             style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '12px',
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
               background: 'rgba(124, 92, 252, 0.18)',
               display: 'flex',
               alignItems: 'center',
@@ -74,7 +74,7 @@ export function LeaderboardTable() {
             </div>
             <div
               style={{
-                fontSize: '28px',
+                fontSize: '22px',
                 fontWeight: 800,
                 color: 'var(--purple-light)',
                 lineHeight: 1,
@@ -100,7 +100,7 @@ export function LeaderboardTable() {
           </div>
           <div
             style={{
-              fontSize: '28px',
+              fontSize: '22px',
               fontWeight: 800,
               color: 'var(--purple-light)',
               lineHeight: 1,

@@ -13,15 +13,15 @@ export default function MintPage() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '40px 16px',
+        padding: '20px 16px',
       }}
     >
-      <div style={{ width: '100%', maxWidth: '480px', marginBottom: '32px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: 700, margin: '0 0 8px' }}>
+      <div style={{ width: '100%', maxWidth: '480px', marginBottom: '16px', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: '0 0 4px' }}>
           Mint Your{' '}
           <span className="text-gradient">Trader NFT</span>
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '16px', margin: 0 }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
           Earn points by swapping and mint an NFT that reflects your trading tier.
         </p>
       </div>

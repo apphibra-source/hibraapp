@@ -105,13 +105,13 @@ export function MintCard() {
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '10px',
       }}
     >
       {/* Current tier card */}
       <div
         className="card"
-        style={{ padding: '32px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}
+        style={{ padding: '20px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}
       >
         {/* Background glow */}
         <div
@@ -133,25 +133,25 @@ export function MintCard() {
         {/* NFT Preview */}
         <div
           style={{
-            width: '140px',
-            height: '140px',
-            borderRadius: '20px',
+            width: '100px',
+            height: '100px',
+            borderRadius: '16px',
             background: eligibleTier?.gradient ?? 'linear-gradient(135deg, #2a2a55, #1a1a35)',
-            margin: '0 auto 20px',
+            margin: '0 auto 12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '56px',
+            fontSize: '42px',
             boxShadow: `0 8px 32px ${eligibleTier?.color ?? '#7c5cfc'}40`,
           }}
         >
           {eligibleTier ? getTierEmoji(eligibleTier.tier) : '🔒'}
         </div>
 
-        <h2 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: 700 }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: 700 }}>
           {eligibleTier ? eligibleTier.name : 'No Tier Yet'}
         </h2>
-        <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
+        <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: '13px' }}>
           {isConnected
             ? `Your score: ${currentScore.toLocaleString()} pts`
             : 'Connect wallet to see your tier'}
@@ -159,7 +159,7 @@ export function MintCard() {
 
         {/* Progress to next tier */}
         {isConnected && nextTier && eligibleTier && (
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: '12px' }}>
             <div
               style={{
                 display: 'flex',
@@ -277,18 +277,18 @@ export function MintCard() {
       </div>
 
       {/* All tiers */}
-      <div className="card" style={{ padding: '20px' }}>
+      <div className="card" style={{ padding: '14px' }}>
         <div
           style={{
-            fontSize: '14px',
+            fontSize: '12px',
             fontWeight: 600,
             color: 'var(--text-muted)',
-            marginBottom: '14px',
+            marginBottom: '10px',
           }}
         >
           ALL TIERS
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {NFT_TIERS.map((tier) => {
             const isEligible = currentScore >= tier.minScore
             const isCurrent = eligibleTier?.tier === tier.tier
@@ -299,9 +299,9 @@ export function MintCard() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px',
-                  borderRadius: '12px',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  borderRadius: '10px',
                   border: `1px solid ${isCurrent ? 'var(--purple)' : 'var(--border)'}`,
                   background: isCurrent ? 'rgba(124, 92, 252, 0.06)' : 'transparent',
                   opacity: isEligible ? 1 : 0.45,
@@ -309,33 +309,33 @@ export function MintCard() {
               >
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
                     background: tier.gradient,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '20px',
+                    fontSize: '16px',
                     flexShrink: 0,
                   }}
                 >
                   {getTierEmoji(tier.tier)}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px' }}>{tier.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontWeight: 600, fontSize: '13px' }}>{tier.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     {tier.minScore.toLocaleString()}+ pts required
                   </div>
                 </div>
                 {isCurrent && (
                   <span
                     style={{
-                      padding: '3px 10px',
+                      padding: '2px 8px',
                       borderRadius: '20px',
                       background: 'linear-gradient(135deg, #7c5cfc, #a855f7)',
                       color: 'white',
-                      fontSize: '11px',
+                      fontSize: '10px',
                       fontWeight: 700,
                     }}
                   >
@@ -343,7 +343,7 @@ export function MintCard() {
                   </span>
                 )}
                 {isEligible && !isCurrent && (
-                  <span style={{ color: 'var(--green)', fontSize: '16px' }}>✓</span>
+                  <span style={{ color: 'var(--green)', fontSize: '14px' }}>✓</span>
                 )}
               </div>
             )
