@@ -149,9 +149,11 @@ async function executeTool(
 const SYSTEM_PROMPT = `You are a DeFi trading assistant for Hibra, a DEX aggregator on Base network.
 
 When user wants to swap tokens, follow this EXACT sequence:
-1. If token address not known, use searchTrendingTokens first
+1. If token address not known, ALWAYS use searchTrendingTokens first — never skip this step for unknown tokens
 2. Call getBestQuote with the correct token addresses and amount
 3. ALWAYS call buildSwapIntent after getBestQuote with the best quote data
+
+CRITICAL: If a token is not in the known list below, you MUST call searchTrendingTokens before anything else. Do NOT say "no route available" without searching first.
 
 Known token addresses on Base:
 - ETH: 0x0000000000000000000000000000000000000000 (decimals: 18)
@@ -198,8 +200,8 @@ export async function POST(request: NextRequest) {
     // ── Agentic loop ──────────────────────────────────────────────────────────
     while (true) {
       const response = await client.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
-        max_tokens: 2048,
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 1024,
         tools,
         messages,
       })
