@@ -27,19 +27,19 @@ export function ProfileCard({ address }: ProfileCardProps) {
   }
 
   return (
-    <div className="card" style={{ padding: '24px' }}>
+    <div className="card" style={{ padding: '16px' }}>
       {/* Avatar + address */}
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
         <div
           style={{
-            width: '64px',
-            height: '64px',
+            width: '48px',
+            height: '48px',
             borderRadius: '50%',
             background: tier?.gradient ?? 'linear-gradient(135deg, #7c5cfc, #a855f7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '24px',
+            fontSize: '20px',
             flexShrink: 0,
           }}
         >
@@ -49,7 +49,7 @@ export function ProfileCard({ address }: ProfileCardProps) {
           <div
             style={{
               fontFamily: 'monospace',
-              fontSize: '15px',
+              fontSize: '14px',
               fontWeight: 600,
               color: 'var(--text-main)',
               marginBottom: '4px',
@@ -60,11 +60,11 @@ export function ProfileCard({ address }: ProfileCardProps) {
           {tier && (
             <span
               style={{
-                padding: '3px 10px',
+                padding: '2px 8px',
                 borderRadius: '20px',
                 background: tier.gradient,
                 color: 'white',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 700,
               }}
             >
@@ -78,8 +78,8 @@ export function ProfileCard({ address }: ProfileCardProps) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: '12px',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '8px',
         }}
       >
         {[
@@ -91,10 +91,10 @@ export function ProfileCard({ address }: ProfileCardProps) {
           <div
             key={label}
             className="card2"
-            style={{ padding: '14px', textAlign: 'center' }}
+            style={{ padding: '10px', textAlign: 'center' }}
           >
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)' }}>{value}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{label}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)' }}>{value}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{label}</div>
           </div>
         ))}
       </div>

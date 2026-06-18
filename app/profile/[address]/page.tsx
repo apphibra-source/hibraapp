@@ -25,10 +25,10 @@ export default async function ProfilePage({
       style={{
         maxWidth: '800px',
         margin: '0 auto',
-        padding: '40px 16px',
+        padding: '16px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '10px',
       }}
     >
       <ProfileCard address={address} />
