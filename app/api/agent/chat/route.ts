@@ -2,12 +2,6 @@ import { type NextRequest } from 'next/server'
 import OpenAI from 'openai'
 import type { QuoteResult } from '@/types'
 
-// Groq — OpenAI-compatible API
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: 'https://api.groq.com/openai/v1',
-})
-
 // ── Tool definitions (OpenAI function_call format) ────────────────────────────
 
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
@@ -177,6 +171,12 @@ Always respond in the same language as the user.`
 
 export async function POST(request: NextRequest) {
   lastQuotesCache = null
+
+  // Initialize client at runtime so missing key doesn't break build
+  const client = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: 'https://api.groq.com/openai/v1',
+  })
 
   try {
     const body = await request.json() as { message: string }
