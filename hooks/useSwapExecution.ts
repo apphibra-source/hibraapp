@@ -176,6 +176,7 @@ export function useSwapExecution() {
         // ── Step 3: Try wallet_sendCalls (Base App / smart wallet) ────────────
         // Use connector ID to detect smart wallet — no RPC call needed, avoids popup
         const supportsBatch = isSmartWallet
+        let localTxHash = ''
 
         if (supportsBatch) {
           // Single popup for everything — approve + swap atomically
@@ -203,6 +204,7 @@ export function useSwapExecution() {
           })
           const batchId = typeof batchResult === 'string' ? batchResult : batchResult.id
           setTxHash(batchId)
+          localTxHash = batchId
 
           setStatus('success')
           toast.success('Swap submitted!', {
@@ -238,6 +240,7 @@ export function useSwapExecution() {
           toast.loading('Sending swap transaction...', { id: 'swap' })
           const hash = await sendTransactionAsync({ to, data: swapData, value: swapValue })
           setTxHash(hash)
+          localTxHash = hash
 
           setStatus('success')
           toast.success('Swap submitted!', {
@@ -263,6 +266,7 @@ export function useSwapExecution() {
         addCustomToken(tokenOut)
         setTimeout(() => invalidateBalances(), 3000)
 
+        // Use local hash variables (not txHash state — React state may not be updated yet)
         recordSwap({
           userAddress: address,
           tokenIn: tokenIn.address,
@@ -272,7 +276,7 @@ export function useSwapExecution() {
           amountIn,
           amountOut: quote.amountOutFormatted,
           dex: quote.dex,
-          txHash: txHash ?? '',
+          txHash: localTxHash,
           volumeUSD: estimateVolumeUSD(tokenIn.symbol, tokenOut.symbol, amountIn, quote.amountOutFormatted),
         })
 
@@ -282,7 +286,7 @@ export function useSwapExecution() {
         toast.error('Swap failed', { id: 'swap', description: message.slice(0, 100) })
       }
     },
-    [address, publicClient, sendTransactionAsync, sendCallsAsync, invalidateBalances, txHash, isSmartWallet]
+    [address, publicClient, sendTransactionAsync, sendCallsAsync, invalidateBalances, isSmartWallet]
   )
 
   const reset = useCallback(() => {
