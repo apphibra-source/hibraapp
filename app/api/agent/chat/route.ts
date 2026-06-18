@@ -1,76 +1,67 @@
 import { type NextRequest } from 'next/server'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 import type { QuoteResult } from '@/types'
 
-// ── Tool definitions (OpenAI function_call format) ────────────────────────────
+// ── Tool definitions (Anthropic format) ──────────────────────────────────────
 
-const tools: OpenAI.Chat.ChatCompletionTool[] = [
+const tools: Anthropic.Tool[] = [
   {
-    type: 'function',
-    function: {
-      name: 'searchTrendingTokens',
-      description: 'Search for tokens on Base network using GeckoTerminal. Use this to find a token address when the user mentions a token by name.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Token name or symbol to search for, e.g. "BRETT", "DEGEN", "VIRTUAL"',
-          },
+    name: 'searchTrendingTokens',
+    description: 'Search for tokens on Base network using GeckoTerminal. Use this to find a token address when the user mentions a token by name.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Token name or symbol to search for, e.g. "BRETT", "DEGEN", "VIRTUAL"',
         },
-        required: ['query'],
       },
+      required: ['query'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'getBestQuote',
-      description: 'Get the best swap quote from Hibra aggregator. Returns all available routes. IMPORTANT: After calling this, you MUST call buildSwapIntent with the best quote data.',
-      parameters: {
-        type: 'object',
-        properties: {
-          tokenIn: {
-            type: 'string',
-            description: 'Input token address. ETH=0x0000000000000000000000000000000000000000, WETH=0x4200000000000000000000000000000000000006, USDC=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, AERO=0x940181a94A35A4569E4529A3CDfB74e38FD98631',
-          },
-          tokenInSymbol: { type: 'string', description: 'Symbol of input token e.g. ETH, USDC' },
-          tokenInDecimals: { type: 'number', description: 'Decimals of input token (ETH=18, USDC=6)' },
-          tokenOut: { type: 'string', description: 'Output token address' },
-          tokenOutSymbol: { type: 'string', description: 'Symbol of output token' },
-          tokenOutDecimals: { type: 'number', description: 'Decimals of output token' },
-          amountIn: { type: 'string', description: 'Human-readable amount e.g. "0.01"' },
-          amountInRaw: {
-            type: 'string',
-            description: 'Amount in smallest unit. For ETH: multiply by 1e18. For USDC: multiply by 1e6. Example: 0.01 ETH = "10000000000000000"',
-          },
+    name: 'getBestQuote',
+    description: 'Get the best swap quote from Hibra aggregator. Returns all available routes. IMPORTANT: After calling this, you MUST call buildSwapIntent with the best quote data.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        tokenIn: {
+          type: 'string',
+          description: 'Input token address. ETH=0x0000000000000000000000000000000000000000, WETH=0x4200000000000000000000000000000000000006, USDC=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, AERO=0x940181a94A35A4569E4529A3CDfB74e38FD98631',
         },
-        required: ['tokenIn', 'tokenInSymbol', 'tokenInDecimals', 'tokenOut', 'tokenOutSymbol', 'tokenOutDecimals', 'amountIn', 'amountInRaw'],
+        tokenInSymbol: { type: 'string', description: 'Symbol of input token e.g. ETH, USDC' },
+        tokenInDecimals: { type: 'number', description: 'Decimals of input token (ETH=18, USDC=6)' },
+        tokenOut: { type: 'string', description: 'Output token address' },
+        tokenOutSymbol: { type: 'string', description: 'Symbol of output token' },
+        tokenOutDecimals: { type: 'number', description: 'Decimals of output token' },
+        amountIn: { type: 'string', description: 'Human-readable amount e.g. "0.01"' },
+        amountInRaw: {
+          type: 'string',
+          description: 'Amount in smallest unit. For ETH: multiply by 1e18. For USDC: multiply by 1e6. Example: 0.01 ETH = "10000000000000000"',
+        },
       },
+      required: ['tokenIn', 'tokenInSymbol', 'tokenInDecimals', 'tokenOut', 'tokenOutSymbol', 'tokenOutDecimals', 'amountIn', 'amountInRaw'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'buildSwapIntent',
-      description: 'Build the swap confirmation card for the user. Call this after getBestQuote with the best quote data.',
-      parameters: {
-        type: 'object',
-        properties: {
-          tokenIn: { type: 'string' },
-          tokenInSymbol: { type: 'string' },
-          tokenInDecimals: { type: 'number' },
-          tokenOut: { type: 'string' },
-          tokenOutSymbol: { type: 'string' },
-          tokenOutDecimals: { type: 'number' },
-          amountIn: { type: 'string', description: 'Human-readable amount' },
-          amountInRaw: { type: 'string', description: 'Raw amount in smallest unit' },
-          dex: { type: 'string', description: 'Best DEX name from the quote' },
-          amountOut: { type: 'string', description: 'Human-readable estimated output amount' },
-          fee: { type: 'string', description: 'Fee from the best quote' },
-        },
-        required: ['tokenIn', 'tokenInSymbol', 'tokenInDecimals', 'tokenOut', 'tokenOutSymbol', 'tokenOutDecimals', 'amountIn', 'amountInRaw', 'dex', 'amountOut', 'fee'],
+    name: 'buildSwapIntent',
+    description: 'Build the swap confirmation card for the user. Call this after getBestQuote with the best quote data.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        tokenIn: { type: 'string' },
+        tokenInSymbol: { type: 'string' },
+        tokenInDecimals: { type: 'number' },
+        tokenOut: { type: 'string' },
+        tokenOutSymbol: { type: 'string' },
+        tokenOutDecimals: { type: 'number' },
+        amountIn: { type: 'string', description: 'Human-readable amount' },
+        amountInRaw: { type: 'string', description: 'Raw amount in smallest unit' },
+        dex: { type: 'string', description: 'Best DEX name from the quote' },
+        amountOut: { type: 'string', description: 'Human-readable estimated output amount' },
+        fee: { type: 'string', description: 'Fee from the best quote' },
       },
+      required: ['tokenIn', 'tokenInSymbol', 'tokenInDecimals', 'tokenOut', 'tokenOutSymbol', 'tokenOutDecimals', 'amountIn', 'amountInRaw', 'dex', 'amountOut', 'fee'],
     },
   },
 ]
@@ -144,7 +135,7 @@ async function executeTool(
   return { error: `Unknown tool: ${name}` }
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
+// ── System prompt ─────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a DeFi trading assistant for Hibra, a DEX aggregator on Base network.
 
@@ -171,30 +162,17 @@ After getBestQuote, call buildSwapIntent with same tokenIn/tokenOut/symbols/deci
 
 Always respond in the same language as the user.`
 
+// ── Route handler ─────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   lastQuotesCache = null
 
-  // ── Provider fallback chain: Groq → Cerebras → Mistral ───────────────────
-  const PROVIDERS = [
-    {
-      name: 'Groq',
-      apiKey: process.env.GROQ_API_KEY ?? '',
-      baseURL: 'https://api.groq.com/openai/v1',
-      model: 'llama-3.3-70b-versatile',
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    defaultHeaders: {
+      'anthropic-beta': 'prompt-caching-2024-07-31',
     },
-    {
-      name: 'Cerebras',
-      apiKey: process.env.CEREBRAS_API_KEY ?? '',
-      baseURL: 'https://api.cerebras.ai/v1',
-      model: 'llama-3.3-70b',
-    },
-    {
-      name: 'Mistral',
-      apiKey: process.env.MISTRAL_API_KEY ?? '',
-      baseURL: 'https://api.mistral.ai/v1',
-      model: 'mistral-small-latest',
-    },
-  ].filter(p => p.apiKey)
+  })
 
   try {
     const body = await request.json() as { message: string }
@@ -205,85 +183,68 @@ export async function POST(request: NextRequest) {
     }
 
     const origin = request.nextUrl.origin
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+    const messages: Anthropic.MessageParam[] = [
       { role: 'user', content: message },
     ]
 
     let swapIntent: Record<string, unknown> | null = null
     let finalText = ''
 
-    // ── Agentic loop with provider fallback ───────────────────────────────────
-    let lastError: Error | null = null
+    // ── Agentic loop ──────────────────────────────────────────────────────────
+    while (true) {
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: [
+          {
+            type: 'text' as const,
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        tools,
+        messages,
+      })
 
-    for (const provider of PROVIDERS) {
-      try {
-        const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL })
-        swapIntent = null
-        finalText = ''
-        const msgsCopy = [...messages]
+      // Collect text from response
+      const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+      if (textBlock) finalText = textBlock.text
 
-        while (true) {
-          const response = await client.chat.completions.create({
-            model: provider.model,
-            max_tokens: 1024,
-            tools,
-            messages: msgsCopy,
+      // If no tool use, we're done
+      if (response.stop_reason === 'end_turn') {
+        break
+      }
+
+      // Handle tool use
+      if (response.stop_reason === 'tool_use') {
+        const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+
+        // Add assistant message
+        messages.push({ role: 'assistant', content: response.content })
+
+        // Execute each tool and collect results
+        const toolResults: Anthropic.ToolResultBlockParam[] = []
+
+        for (const toolUse of toolUseBlocks) {
+          const result = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>, origin)
+
+          if (toolUse.name === 'buildSwapIntent') {
+            const resultObj = result as { swapIntent?: Record<string, unknown> }
+            if (resultObj.swapIntent) swapIntent = resultObj.swapIntent
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify(result),
           })
-
-          const choice = response.choices[0]
-          const msg = choice.message
-
-          if (choice.finish_reason === 'stop' || !msg.tool_calls?.length) {
-            finalText = msg.content ?? ''
-            break
-          }
-
-          if (choice.finish_reason === 'tool_calls' || msg.tool_calls?.length) {
-            msgsCopy.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
-
-            for (const toolCall of msg.tool_calls ?? []) {
-              const tc = toolCall as OpenAI.Chat.ChatCompletionMessageToolCall
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const fnDef = (tc as any).function as { name: string; arguments: string }
-              const fnName = fnDef.name
-              const fnArgs = JSON.parse(fnDef.arguments) as Record<string, unknown>
-
-              const result = await executeTool(fnName, fnArgs, origin)
-
-              if (fnName === 'buildSwapIntent') {
-                const resultObj = result as { swapIntent?: Record<string, unknown> }
-                if (resultObj.swapIntent) swapIntent = resultObj.swapIntent
-              }
-
-              msgsCopy.push({
-                role: 'tool',
-                tool_call_id: tc.id,
-                content: JSON.stringify(result),
-              })
-            }
-            continue
-          }
-
-          break
         }
 
-        // Provider succeeded — exit fallback loop
-        break
-
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        // OpenAI client wraps 429 as APIError with status property
-        const status = (err as { status?: number })?.status
-        const is429 = status === 429 || msg.includes('429') || msg.toLowerCase().includes('rate limit')
-        lastError = err instanceof Error ? err : new Error(msg)
-        if (is429) continue   // try next provider
-        throw err              // non-rate-limit error — propagate immediately
+        messages.push({ role: 'user', content: toolResults })
+        continue
       }
-    }
 
-    if (!finalText && !swapIntent && lastError) {
-      return Response.json({ error: `All providers rate limited. ${lastError.message}` }, { status: 429 })
+      break
     }
 
     return Response.json({ message: finalText, swapIntent })
