@@ -174,8 +174,8 @@ export async function POST(request: NextRequest) {
 
   // Initialize client at runtime so missing key doesn't break build
   const client = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: process.env.GEMINI_API_KEY,
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
   })
 
   try {
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
     // ── Agentic loop ──────────────────────────────────────────────────────────
     while (true) {
       const response = await client.chat.completions.create({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        model: 'gemini-2.0-flash',
         max_tokens: 1024,
         tools,
         messages,
