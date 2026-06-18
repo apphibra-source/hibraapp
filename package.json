@@ -1,7 +1,14 @@
 {
-  "name": "baseagg",
-  "version": "0.1.0",
-  "private": true,
+  "name": "hibra",
+  "version": "1.0.0",
+  "description": "Hibra — AI-powered DEX aggregator on Base network",
+  "homepage": "https://hibra.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/hibra"
+  },
+  "license": "MIT",
+  "keywords": ["defi", "dex", "aggregator", "base", "blockchain", "ai", "grok"],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
