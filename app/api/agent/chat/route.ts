@@ -174,11 +174,27 @@ Always respond in the same language as the user.`
 export async function POST(request: NextRequest) {
   lastQuotesCache = null
 
-  // Initialize client at runtime so missing key doesn't break build
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
-  })
+  // ── Provider fallback chain: Groq → Cerebras → Mistral ───────────────────
+  const PROVIDERS = [
+    {
+      name: 'Groq',
+      apiKey: process.env.GROQ_API_KEY ?? '',
+      baseURL: 'https://api.groq.com/openai/v1',
+      model: 'llama-3.3-70b-versatile',
+    },
+    {
+      name: 'Cerebras',
+      apiKey: process.env.CEREBRAS_API_KEY ?? '',
+      baseURL: 'https://api.cerebras.ai/v1',
+      model: 'llama-3.3-70b',
+    },
+    {
+      name: 'Mistral',
+      apiKey: process.env.MISTRAL_API_KEY ?? '',
+      baseURL: 'https://api.mistral.ai/v1',
+      model: 'mistral-small-latest',
+    },
+  ].filter(p => p.apiKey)
 
   try {
     const body = await request.json() as { message: string }
@@ -197,52 +213,75 @@ export async function POST(request: NextRequest) {
     let swapIntent: Record<string, unknown> | null = null
     let finalText = ''
 
-    // ── Agentic loop ──────────────────────────────────────────────────────────
-    while (true) {
-      const response = await client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 1024,
-        tools,
-        messages,
-      })
+    // ── Agentic loop with provider fallback ───────────────────────────────────
+    let lastError: Error | null = null
 
-      const choice = response.choices[0]
-      const msg = choice.message
+    for (const provider of PROVIDERS) {
+      try {
+        const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL })
+        swapIntent = null
+        finalText = ''
+        const msgsCopy = [...messages]
 
-      if (choice.finish_reason === 'stop' || !msg.tool_calls?.length) {
-        finalText = msg.content ?? ''
-        break
-      }
+        while (true) {
+          const response = await client.chat.completions.create({
+            model: provider.model,
+            max_tokens: 1024,
+            tools,
+            messages: msgsCopy,
+          })
 
-      if (choice.finish_reason === 'tool_calls' || msg.tool_calls?.length) {
-        // Add assistant message with tool calls
-        messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
+          const choice = response.choices[0]
+          const msg = choice.message
 
-        // Execute each tool call
-        for (const toolCall of msg.tool_calls ?? []) {
-          const tc = toolCall as OpenAI.Chat.ChatCompletionMessageToolCall
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const fnDef = (tc as any).function as { name: string; arguments: string }
-          const fnName = fnDef.name
-          const fnArgs = JSON.parse(fnDef.arguments) as Record<string, unknown>
-
-          const result = await executeTool(fnName, fnArgs, origin)
-
-          if (fnName === 'buildSwapIntent') {
-            const resultObj = result as { swapIntent?: Record<string, unknown> }
-            if (resultObj.swapIntent) swapIntent = resultObj.swapIntent
+          if (choice.finish_reason === 'stop' || !msg.tool_calls?.length) {
+            finalText = msg.content ?? ''
+            break
           }
 
-          messages.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            content: JSON.stringify(result),
-          })
-        }
-        continue
-      }
+          if (choice.finish_reason === 'tool_calls' || msg.tool_calls?.length) {
+            msgsCopy.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls })
 
-      break
+            for (const toolCall of msg.tool_calls ?? []) {
+              const tc = toolCall as OpenAI.Chat.ChatCompletionMessageToolCall
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const fnDef = (tc as any).function as { name: string; arguments: string }
+              const fnName = fnDef.name
+              const fnArgs = JSON.parse(fnDef.arguments) as Record<string, unknown>
+
+              const result = await executeTool(fnName, fnArgs, origin)
+
+              if (fnName === 'buildSwapIntent') {
+                const resultObj = result as { swapIntent?: Record<string, unknown> }
+                if (resultObj.swapIntent) swapIntent = resultObj.swapIntent
+              }
+
+              msgsCopy.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                content: JSON.stringify(result),
+              })
+            }
+            continue
+          }
+
+          break
+        }
+
+        // Provider succeeded — exit fallback loop
+        break
+
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        const is429 = msg.includes('429') || msg.includes('rate limit') || msg.includes('Rate limit')
+        lastError = err instanceof Error ? err : new Error(msg)
+        if (is429) continue   // try next provider
+        throw err              // non-rate-limit error — propagate immediately
+      }
+    }
+
+    if (!finalText && !swapIntent && lastError) {
+      return Response.json({ error: `All providers rate limited. ${lastError.message}` }, { status: 429 })
     }
 
     return Response.json({ message: finalText, swapIntent })
