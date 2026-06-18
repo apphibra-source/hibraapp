@@ -273,7 +273,9 @@ export async function POST(request: NextRequest) {
 
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        const is429 = msg.includes('429') || msg.includes('rate limit') || msg.includes('Rate limit')
+        // OpenAI client wraps 429 as APIError with status property
+        const status = (err as { status?: number })?.status
+        const is429 = status === 429 || msg.includes('429') || msg.toLowerCase().includes('rate limit')
         lastError = err instanceof Error ? err : new Error(msg)
         if (is429) continue   // try next provider
         throw err              // non-rate-limit error — propagate immediately
