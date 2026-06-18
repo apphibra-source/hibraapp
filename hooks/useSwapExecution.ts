@@ -36,7 +36,14 @@ interface SwapExecutionParams {
 type SwapStatus = 'idle' | 'approving' | 'swapping' | 'success' | 'error'
 
 /** Smart wallet connector IDs that support wallet_sendCalls */
-const SMART_WALLET_IDS = new Set(['baseAccount', 'coinbaseWalletSDK', 'smartWallet'])
+const SMART_WALLET_IDS = new Set([
+  'baseAccount',
+  'coinbaseWalletSDK',
+  'smartWallet',
+  'com.coinbase.wallet',
+  'coinbaseWallet',
+  'CoinbaseWallet',
+])
 
 export function useSwapExecution() {
   const { address, connector } = useAccount()
@@ -49,7 +56,9 @@ export function useSwapExecution() {
   const [txHash, setTxHash] = useState<string | null>(null)
 
   /** True if the connected wallet is a smart wallet supporting wallet_sendCalls */
-  const isSmartWallet = connector?.id ? SMART_WALLET_IDS.has(connector.id) : false
+  const isSmartWallet = connector?.id
+    ? SMART_WALLET_IDS.has(connector.id) || SMART_WALLET_IDS.has(connector.name ?? '')
+    : false
 
   const executeSwap = useCallback(
     async (params: SwapExecutionParams) => {
@@ -215,8 +224,13 @@ export function useSwapExecution() {
               to: tokenIn.address as `0x${string}`,
               data: approveData,
             })
-            // Wait for approval receipt (EOA wallets resolve this quickly)
-            await publicClient.waitForTransactionReceipt({ hash: approveHash })
+            // Wait for approval receipt with timeout (some wallets don't confirm quickly)
+            await Promise.race([
+              publicClient.waitForTransactionReceipt({ hash: approveHash }),
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error('Approval confirmation timeout — please try again')), 30_000)
+              ),
+            ])
             toast.success('Token approved', { id: 'approve' })
           }
 
