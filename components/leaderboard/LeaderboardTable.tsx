@@ -40,10 +40,12 @@ export function LeaderboardTable() {
           background: 'rgba(124, 92, 252, 0.10)',
           border: '1px solid rgba(124, 92, 252, 0.35)',
           marginBottom: '16px',
+          gap: '16px',
+          flexWrap: 'wrap',
         }}
       >
+        {/* Left: trophy + rank */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Trophy icon */}
           <div
             style={{
               width: '36px',
@@ -85,29 +87,12 @@ export function LeaderboardTable() {
           </div>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              marginBottom: '4px',
-            }}
-          >
-            Points
-          </div>
-          <div
-            style={{
-              fontSize: '22px',
-              fontWeight: 800,
-              color: 'var(--purple-light)',
-              lineHeight: 1,
-            }}
-          >
-            {myEntry ? formatCompact(myEntry.score) : '0'}
-          </div>
+        {/* Right: score + volume + swaps + points */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <StatPill label="Score" value={myEntry ? formatCompact(myEntry.score) : '0'} />
+          <StatPill label="Volume" value={myEntry ? formatUSD(myEntry.volumeUSD) : '$0'} />
+          <StatPill label="Swaps" value={myEntry ? String(myEntry.swapCount) : '0'} />
+          <StatPill label="Points" value={myEntry ? formatCompact(myEntry.score) : '0'} highlight />
         </div>
       </div>
     )
@@ -395,6 +380,35 @@ export function LeaderboardTable() {
           Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total} traders
         </div>
       )}
+    </div>
+  )
+}
+
+function StatPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div style={{ textAlign: 'right' }}>
+      <div
+        style={{
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          marginBottom: '4px',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: '18px',
+          fontWeight: 800,
+          color: highlight ? 'var(--purple-light)' : 'var(--text-main)',
+          lineHeight: 1,
+        }}
+      >
+        {value}
+      </div>
     </div>
   )
 }
