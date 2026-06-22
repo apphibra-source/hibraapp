@@ -32,67 +32,82 @@ export function LeaderboardTable() {
     return (
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '14px 18px',
+          display: 'grid',
+          gridTemplateColumns: '48px 1fr 100px 100px 80px',
+          gap: '12px',
+          padding: '14px 20px',
           borderRadius: '12px',
           background: 'rgba(124, 92, 252, 0.10)',
           border: '1px solid rgba(124, 92, 252, 0.35)',
-          marginBottom: '16px',
-          gap: '16px',
-          flexWrap: 'wrap',
+          marginBottom: '8px',
+          alignItems: 'center',
         }}
       >
-        {/* Left: trophy + rank */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Rank # */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Your rank
+          </span>
+          <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--purple-light)', lineHeight: 1 }}>
+            {myEntry ? `#${myEntry.rank}` : '—'}
+          </span>
+        </div>
+
+        {/* Trader label (blank — keeps grid aligned) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
               background: 'rgba(124, 92, 252, 0.18)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '22px',
+              fontSize: '16px',
               flexShrink: 0,
             }}
           >
             🏆
           </div>
-          <div>
-            <div
+          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--purple-light)', fontFamily: 'monospace' }}>
+            {shortenAddress(connectedAddress)}
+            <span
               style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: 'var(--text-muted)',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: '4px',
-              }}
-            >
-              Your rank
-            </div>
-            <div
-              style={{
-                fontSize: '22px',
-                fontWeight: 800,
+                marginLeft: '6px',
+                padding: '1px 6px',
+                borderRadius: '20px',
+                background: 'rgba(124, 92, 252, 0.2)',
                 color: 'var(--purple-light)',
-                lineHeight: 1,
+                fontSize: '10px',
+                fontWeight: 700,
+                fontFamily: 'sans-serif',
               }}
             >
-              {myEntry ? `#${myEntry.rank}` : '—'}
-            </div>
-          </div>
+              YOU
+            </span>
+          </span>
         </div>
 
-        {/* Right: score + volume + swaps + points */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <StatPill label="Score" value={myEntry ? formatCompact(myEntry.score) : '0'} />
-          <StatPill label="Volume" value={myEntry ? formatUSD(myEntry.volumeUSD) : '$0'} />
-          <StatPill label="Swaps" value={myEntry ? String(myEntry.swapCount) : '0'} />
-          <StatPill label="Points" value={myEntry ? formatCompact(myEntry.score) : '0'} highlight />
+        {/* Score */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--purple-light)' }}>
+            {myEntry ? formatCompact(myEntry.score) : '—'}
+          </span>
+        </div>
+
+        {/* Volume */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            {myEntry ? formatUSD(myEntry.volumeUSD) : '—'}
+          </span>
+        </div>
+
+        {/* Swaps */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            {myEntry ? myEntry.swapCount : '—'}
+          </span>
         </div>
       </div>
     )
@@ -380,35 +395,6 @@ export function LeaderboardTable() {
           Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total} traders
         </div>
       )}
-    </div>
-  )
-}
-
-function StatPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div style={{ textAlign: 'right' }}>
-      <div
-        style={{
-          fontSize: '11px',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          marginBottom: '4px',
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: '18px',
-          fontWeight: 800,
-          color: highlight ? 'var(--purple-light)' : 'var(--text-main)',
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </div>
     </div>
   )
 }
