@@ -26,6 +26,7 @@ export function SwapWidget() {
   const [showConfirm, setShowConfirm] = useState(false)
 
   const tokenInBalance = useTokenBalance(tokenIn.address)
+  const tokenOutBalance = useTokenBalance(tokenOut.address)
 
   const { data: quotes = [], isLoading: quotesLoading } = useSwapQuotes({
     tokenIn,
@@ -34,7 +35,7 @@ export function SwapWidget() {
     enabled: !!amountIn && parseFloat(amountIn) > 0,
   })
 
-  const { executeSwap, status } = useSwapExecution()
+  const { executeSwap, status, reset } = useSwapExecution()
 
   const bestQuote = quotes.find((q) => q.isBest) ?? null
   const selectedQuote = quotes.find((q) => q.dex === selectedDex) ?? bestQuote
@@ -44,7 +45,8 @@ export function SwapWidget() {
     setTokenOut(tokenIn)
     setAmountIn('')
     setSelectedDex(null)
-  }, [tokenIn, tokenOut])
+    reset()
+  }, [tokenIn, tokenOut, reset])
 
   const handlePercentage = useCallback(
     (pct: number) => {
@@ -198,9 +200,16 @@ export function SwapWidget() {
       <div className="card" style={{ padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>You receive</span>
-          {quotesLoading && hasAmount && (
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Fetching best rate...</span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {tokenOutBalance && (
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Balance: {tokenOutBalance.balanceFormatted}
+              </span>
+            )}
+            {quotesLoading && hasAmount && (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Fetching best rate...</span>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
