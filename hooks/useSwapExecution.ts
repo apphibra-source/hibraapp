@@ -16,9 +16,18 @@ import {
 import { Attribution } from 'ox/erc8021'
 
 // ── ERC-8021 Builder Code attribution ────────────────────────────────────────
+// Builder code is hardcoded as fallback — attribution works even if env var is missing
+const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE || 'bc_480ypir7'
+
+// Compute suffix once at module load — avoids repeated computation per swap
 const DATA_SUFFIX = Attribution.toDataSuffix({
-  codes: [process.env.NEXT_PUBLIC_BUILDER_CODE ?? 'bc_480ypir7'],
+  codes: [BUILDER_CODE],
 }) as Hex
+
+// Verify attribution is active (visible in browser console / Vercel logs)
+if (typeof window !== 'undefined') {
+  console.log('[Hibra] Builder code attribution active:', BUILDER_CODE)
+}
 
 function withAttribution(data: Hex): Hex {
   return concat([data, DATA_SUFFIX])
