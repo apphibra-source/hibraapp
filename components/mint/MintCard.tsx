@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
+import { encodeFunctionData, concat, type Hex } from 'viem'
+import { Attribution } from 'ox/erc8021'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { toast } from 'sonner'
 import { useUserScore, getTierForScore, getNextTier } from '@/hooks/useUserScore'
@@ -9,6 +11,14 @@ import { NFT_TIERS } from '@/constants'
 import { ADDRESSES } from '@/lib/contracts/addresses'
 import { TRADER_NFT_ABI } from '@/lib/contracts/abis/traderNFT'
 import type { TierInfo } from '@/types'
+
+// ── ERC-8021 Builder Code attribution (same as useSwapExecution) ──────────────
+const BUILDER_CODE = process.env.NEXT_PUBLIC_BUILDER_CODE || 'bc_480ypir7'
+const DATA_SUFFIX = Attribution.toDataSuffix({ codes: [BUILDER_CODE] }) as Hex
+
+function withAttribution(data: Hex): Hex {
+  return concat([data, DATA_SUFFIX])
+}
 
 const NFT_ADDRESSES: Record<number, `0x${string}`> = {
   0: ADDRESSES.NFT_BRONZE,
@@ -20,7 +30,7 @@ const NFT_ADDRESSES: Record<number, `0x${string}`> = {
 export function MintCard() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
+  const { sendTransactionAsync } = useSendTransaction()
   const { data: score, isLoading, refetch: refetchScore } = useUserScore()
   const [isMinting, setIsMinting] = useState(false)
   const [minted, setMinted] = useState(false)
@@ -62,10 +72,16 @@ export function MintCard() {
 
       toast.loading('Minting NFT...', { id: 'mint' })
 
-      const hash = await writeContractAsync({
-        address: contractAddress,
+      // Encode mint() calldata and append ERC-8021 builder code attribution
+      const mintData = encodeFunctionData({
         abi: TRADER_NFT_ABI,
         functionName: 'mint',
+      })
+      const mintDataWithAttribution = withAttribution(mintData)
+
+      const hash = await sendTransactionAsync({
+        to: contractAddress,
+        data: mintDataWithAttribution,
       })
 
       await publicClient.waitForTransactionReceipt({ hash })
